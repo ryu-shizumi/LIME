@@ -148,6 +148,16 @@ namespace LIME
         {
             return new CharMatcher(chars);
         }
+
+        public static CharMatcher To(this char min, char max)
+        {
+            return new CharMatcher(min, max);
+        }
+
+        public static LongMatcher AsLong(this char c)
+        {
+            return c._().Above1;
+        }
     }
     #endregion
     
@@ -177,12 +187,72 @@ namespace LIME
             return _wordHeadChars.Contains(c) || c == '_';
         }
 
-        public static CharMatcher To(this char min, char max)
-        {
-            return new CharMatcher(min, max);
-        }
+        
     }
     #endregion
+
+    public static class ArrayEx
+    {
+        public static T[] GetCopy<T>(this T[] array)
+        {
+            var length = array.Length;
+            var result = new T[length];
+            for(int i = 0; i < length; i++)
+            {
+                result[i] = array[i];
+            }
+            return result;
+        }
+        public static T[] GetCopy<T>(this T[] array, Func<T,T> func)
+        {
+            var length = array.Length;
+            var result = new T[length];
+            for (int i = 0; i < length; i++)
+            {
+                result[i] = func(array[i]);
+            }
+            return result;
+        }
+        public static T[] Add<T>(this T[] array, T item)
+        {
+            var length = array.Length;
+            var result = new T[length + 1];
+            for (int i = 0; i < length; i++)
+            {
+                result[i] = array[i];
+            }
+            result[length] = item;
+            return result;
+        }
+        public static T[] Add<T>(this T[] array, T[] items)
+        {
+            var length = array.Length;
+            var itemLength = items.Length;
+
+            var result = new T[length + itemLength];
+            for (int i = 0; i < length; i++)
+            {
+                result[i] = array[i];
+            }
+            for (int i = 0; i <  itemLength; i++)
+            {
+                result[length + i] = items[i];
+            }
+            return result;
+        }
+        public static T[] Add<T>(this T a, T[] items)
+        {
+            var itemLength = items.Length;
+
+            var result = new T[1 + itemLength];
+            result[0] = a;
+            for (int i = 0; i <  itemLength; i++)
+            {
+                result[1+i] = items[i];
+            }
+            return result;
+        }
+    }
 
     #region タグ付きマッチからの文字列の取得
     public static class MatchListEx
@@ -1227,9 +1297,9 @@ namespace LIME
         /// </summary>
         /// <param name="obj">このインスタンス</param>
         /// <returns>インスタンスに割り当てられたユニークインデックス</returns>
-        public static int UniqIndex(this object obj)
+        public static int UniqIndex(this object obj, Type type)
         {
-            var objType = obj.GetType();
+            var objType = type;
 
             Dictionary<object, int> dict;
             if(_idTable.ContainsKey(objType) == false)

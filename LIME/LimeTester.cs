@@ -3,6 +3,7 @@ using System.Text;
 using System.Diagnostics;
 using System.IO;
 using static LIME.BuiltInMatcher;
+using System.Linq;
 
 namespace LIME
 {
@@ -14,7 +15,7 @@ namespace LIME
         /// </summary>
         public static void Test()
         {
-            
+
 
 
             TestBody("「Test01」", true, "A", Begin + 'A' + End);
@@ -38,35 +39,40 @@ namespace LIME
             TestBody("「Test06_2」", true, "ABC", ('A'._() | 'B' | 'C').Times(3));
 
             var Alphabet = 'a'.To('z') | 'A'.To('Z');
+            var Alphabets = Alphabet.Above1;
 
             TestBody("「Test07_0」", true, "ABC", Alphabet.Times(3));
 
             TestBody("「Test07」", true, "ABC", Begin + Alphabet.Times(3) + End);
 
-            TestBody("「Test08」", true, "ABC", Begin + Alphabet + ("" + Alphabet).Times(2) + End);
+            TestBody("「Test08」", true,
+                "ABC", Begin + Alphabet + ("" + Alphabet).Times(2) + End);
 
             TestBody("「Test09」", true, "ABC", Begin + Alphabet.Times(3, ""._()) + End);
 
             TestBody("「繰り返し(デリミタ長さゼロ)」", false, "abc1", Begin + Alphabet.Times(3, ""._()) + End);
 
             var number = '0'.To('9');
-            var numbers = number._1Max();
+            var numbers = number.Above1["整数"];
 
-            TestBody("「Test10」", true, "012", numbers * 3);
+            TestBody("「Test10」", true, "0", numbers);
 
-            TestBody("「Test11」", true, "012", numbers.Times(2, 3));
+            TestBody("「Test11」", true, "01", numbers);
 
 
             TestBody("「Test12」", true, "012", numbers);
 
             Matcher matcherExe01 = numbers + "+";
 
-            TestBody("「Test13」", true, "01+", matcherExe01);
+            TestBody("「Test13」", true, "01+", numbers + "+");
 
+            TestBody("「Test13_2」", true, "+01", "+" + numbers);
 
             TestBody("「Test14 ２項演算」", true, "0+2", numbers + "+" + numbers);
 
-            TestBody("「Test15 ２項演算」", true, "0 + 2", numbers + "+" + numbers);
+            TestBody("「Test15 ２項演算」", true, "0+2", numbers + "+" + number);
+
+            TestBody("「Test15_2 ２項演算」", true, "0+2", number + "+" + numbers);
 
             TestBody("「Test16 ２項演算」", true, "01+23", numbers + '+' + numbers);
 
@@ -94,35 +100,49 @@ namespace LIME
                 (numbers + '=' + (exp | numbers));
             TestBody("「Test19_2 循環定義(右結合演算)」", true, "01=23=45=67", exp);
 
+
             // 「除算」のマッチャーを作る。(但し中身は空っぽ)
             RecursionMatcher DivExp = new RecursionMatcher();
 
             // 「除算」の中身を設定する。
-            DivExp.Inner = ((numbers["整数"] | DivExp) + '/' + numbers["整数"])["除算式"];
+            DivExp.Inner =
+                ((numbers | DivExp)["左辺"] +
+                '/' +
+                numbers["右辺"])["除算式"];
 
             // 「減算」のマッチャーを作る。(但し中身は空っぽ)
             RecursionMatcher SubExp = new RecursionMatcher();
 
             // 「減算」の中身を設定する。
-            SubExp.Inner = ((numbers["整数"] | DivExp | SubExp) + '-' + (numbers["整数"] | DivExp))["減算式"];
+            SubExp.Inner =
+                ((numbers | DivExp | SubExp)["左辺"] +
+                '-' +
+                (numbers | DivExp)["右辺"])["減算式"];
             TestBody("「Test20 循環定義(左結合演算)」", true, "01-23/45-67-89", SubExp);
 
             // 「左シフト演算」のマッチャーを作る。(但し中身は空っぽ)
             RecursionMatcher LShiftExp = new RecursionMatcher();
 
             // 「左シフト演算」の中身を設定する。
-            LShiftExp.Inner = ((numbers["整数"] | DivExp | SubExp | LShiftExp) + "<<" + (numbers["整数"] | DivExp | SubExp))["左シフト式"];
+            LShiftExp.Inner =
+                ((numbers | DivExp | SubExp | LShiftExp)["左辺"] +
+                "<<" +
+                (numbers | DivExp | SubExp)["右辺"])["左シフト式"];
             TestBody("「Test21 循環定義(左結合演算)」", true, "012<<345/678-901-234", LShiftExp);
+
 
             var Cr = '\r'._();
             var Lf = '\n'._();
 
             // 文字列リテラル(C言語形式)
-            var StringLiteral = '"'._() + 
-                (('\\' + (Cr | Lf ).Not) | (Cr | Lf | '\\' | '"').Not)._0Max() + 
+            var StringLiteral = '"'._() +
+                (('\\' + (Cr | Lf).Not) | (Cr | Lf | '\\' | '"').Not).Above0["文字列中身"] +
                 '"';
+            Debug.WriteLine(StringLiteral.ToString());
+            Debug.WriteLine(StringLiteral.ToTreeText());
 
-            TestBody("「Test22 文字列リテラル」", true, "dd\"a\"89", StringLiteral);
+
+            TestBody("「Test22 文字列リテラル」", true, "ab\"c\"89", StringLiteral);
             TestBody("「Test23 文字列リテラル」", true, "z\"a\"ee", StringLiteral);
             TestBody("「Test24 文字列リテラル」", true, "z\"ab\"ee", StringLiteral);
             TestBody("「Test25 文字列リテラル」", true, "z\"01-23\"ee", StringLiteral);
@@ -134,34 +154,53 @@ namespace LIME
             TestBody("「Test30_2 文字列リテラル」", true, "z\"  \"ee", StringLiteral);
             TestBody("「Test30_3 文字列リテラル」", true, "z  \"  \"  ee", StringLiteral);
 
-            var LineStringLiteral = "%%"._() + (Cr | Lf).Not._0Max();
+            var testPattern = '"' + '"'._().Not.Above1["TextBody"] + '"';
+
+            TestBody("「Test31 文字列リテラル」", true, "a\"01234567890\"", testPattern);
+
+            //var c = numbers["数値"];
+            //var intLiteral = '1'.To('9') + numbers;
+            //var floatLiteral = 
+            //        intLiteral + '.' + numbers + 
+            //        ("e"._() | "E") + ("+"._() | "-")._01();
 
 
-            var cr = "\r";
-            var lf = "\n";
-            var crlf = cr + lf;
+            //var LineStringLiteral = "%%"._() + (Cr | Lf).Not._0Max();
+
+
+            //var cr = "\r";
+            //var lf = "\n";
+            //var crlf = cr + lf;
+            ////var testText =
+            ////    "block" + crlf +
+            ////    "  012345" + crlf +
+            ////    "  nnnnnn" + crlf +
+            ////    "pppppp";
             //var testText =
-            //    "block" + crlf +
+            //    "block" + lf + cr +
             //    "  012345" + crlf +
-            //    "  nnnnnn" + crlf +
+            //    "    nnnnnn" + crlf +
+            //    " block" + lf + cr +
+            //    "  012345" + crlf +
+            //    "   nnnnnn" + crlf +
             //    "pppppp";
-            var testText =
-                "block" + lf + cr +
-                "  012345" + crlf +
-                "    nnnnnn" + crlf +
-                " block" + lf + cr +
-                "  012345" + crlf +
-                "   nnnnnn" + crlf +
-                "pppppp";
 
+            //var bnf = "stringliteral   ::=  [stringprefix](shortstring | longstring);";
 
+            //TestBody("「Test31_1 BNF」", true, "s::=a;", GetBNF());
+            //TestBody("「Test31_2 BNF」", true, "s ::= a ;", GetBNF());
+            //TestBody("「Test31_3 BNF」", true, "s ::= [a] ;", GetBNF());
+            //TestBody("「Test31_4 BNF」", true, "s ::= (a) ;", GetBNF());
+            //TestBody("「Test31_5 BNF」", true, "s ::= b|c ;", GetBNF());
+            //TestBody("「Test31_6 BNF」", true, "s ::= (b|c) ;", GetBNF());
+            //TestBody("「Test31_7 BNF」", true, "s ::= [a](b|c) ;", GetBNF());
 
-            TokenStream tokenStream = new TokenStream(testText);
+            //TokenStream tokenStream = new TokenStream(testText);
 
-            foreach (var token in tokenStream)
-            {
-                Debug.WriteLine(token);
-            }
+            //foreach (var token in tokenStream)
+            //{
+            //    Debug.WriteLine(token);
+            //}
 
             //var newLine = Cr + Lf;
             //var spaces = " "._()._0Max();
@@ -173,7 +212,206 @@ namespace LIME
             //    Dedent;
 
 
+
+            //var parenExp = new RecursionMatcher();
+
+            //var ID = (Alphabet | number)._1Max()["identifier"] |
+            //    '<' + (Alphabet | number | ' ' | '-')._1Max()["identifier"] + '>';
+
+
+
+            //parenExp.Inner =
+            //    ('(' + parenExp["group_exp"] + ')')["group"] |
+            //    ('[' + parenExp["option_exp"] + ']')["option"] |
+            //    (parenExp["or_left"] + '|' + parenExp["or_right"])["or"] |
+            //    (parenExp["connect_left"] + parenExp["connect_right"])["connect"] |
+            //    (parenExp["above1_exp"] + '+')["above1"] |
+            //    (parenExp["above0_exp"] + '*')["above0"] |
+
+            //    ID |
+
+            //    '#' + '#'._().Not._0Max()["literal"] + '#' | // Algol-60 形式
+            //    '"' + '"'._().Not._0Max()["literal"] + '"' |
+            //    '\'' + '\''._().Not._0Max()["literal"] + '\''
+            //    ;
+
+            //var Rule = (ID["rule_name"] + "::=" + parenExp["rule_exp"] + ';'._()._01())["rule"];
+
+
+            //TestBody("「Test40 BNF」", true, "((a|b))", parenExp);
+            //TestBody("「Test41 BNF」", true, "([a|b])", parenExp);
+            //TestBody("「Test42 BNF」", true, "([a b])", parenExp);
+            //TestBody("「Test43 BNF」", true, "([a* b])", parenExp);
+            //TestBody("「Test44 BNF」", true, "([a+ b])", parenExp);
+            //TestBody("「Test45 BNF」", true, "([a+ b])+", parenExp);
+            //TestBody("「Test46 BNF」", true, "([<a b c>+ b])+", parenExp);
+            //TestBody("「Test47 BNF」", true, "([aa+ b])+", parenExp);
+
+            //TestBody("「Test48 BNF」", true, "s::=[a](b|c)", Alphabet + "::=" + parenExp);
+
+
+            //TestBody("「Test49 BNF」", true, "s::=[a](b|c)", ID + "::=" + parenExp + ';'._()._01());
+            //TestBody("「Test50 BNF」", true, "s::=[a](b|c)", Rule);
+            //TestBody("「Test51 BNF」", true, "ss::=[aa](bb|cc)", Rule);
+
+            //TestBody("「Test47 BNF」", true, "stringliteral::=[stringprefix](shortstring|longstring)", Rule);
         }
+
+
+        /// <summary>
+        /// BNF で記述された構文定義文字列からLIMEソースコードに変換する
+        /// </summary>
+        /// <param name="text"></param>
+        /// <returns></returns>
+        public static string BNFtoLIME(string text)
+        {
+            var BNF = GetBNF();
+            var match = BNF.Search(text);
+            var LIME = TagToString(text, match);
+            return LIME;
+        }
+
+        /// <summary>
+        /// 一般的に用いられているBNF用パーサを返信する
+        /// </summary>
+        /// <returns></returns>
+        /// <remarks>
+        /// 
+        /// ::= で代入する場合、 = がクォーテーションで囲われずそのまま書かれる場合がある
+        /// <要素名> の場合、要素名に空白を含む場合がある
+        /// 
+        /// </remarks>
+        public static Matcher GetBNF()
+        {
+
+            // <aaa> のように囲われた識別子
+            var EnclosedID = '<' + '>'._().Not._1Max()["identifier"] + '>';
+            var Cr = '\r'._();
+            var Lf = '\n'._();
+
+            var Blank = Cr | Lf | " " | "\t";
+
+            // 囲われたリテラル
+            var EnclosedLiteral =
+                '#' + '#'._().Not._0Max()["literal"] + '#' | // Algol-60 形式
+                '"' + '"'._().Not._0Max()["literal"] + '"' |
+                '\'' + '\''._().Not._0Max()["literal"] + '\'';
+
+            // 生リテラル
+            var NakedLiteral = (' ' | Cr | Lf).Not._1Max(); ;
+
+            // 囲われた識別子を使う式
+            var EExp = new RecursionMatcher();
+
+            var EOr = (EExp["or_left"] + '|' + EExp["or_right"])["or"];
+            var EOption = ('[' + EExp["option_exp"] + ']')["option"];
+            var EAbove0 = (EExp["above0_exp"] + '*')["above0"];
+            var EAbove1 = (EExp["above1_exp"] + '+')["above1"];
+            var EGroup = ('(' + EExp["group_exp"] + ')')["group"];
+            var EConnect = EExp + EExp;
+
+            EExp.Inner = EnclosedID | EnclosedLiteral | NakedLiteral | 
+                EOr | EOption | EAbove0 | EAbove1 | EGroup | EConnect;
+            var ERule = (EnclosedID["rule_name"] + "::=" + EExp["rule_exp"] + ';'._()._01())["rule"];
+
+            // 囲われた識別子で定義されたBNF
+            var EnclosedBNF = Begin + ERule._1Max() + End;
+
+
+            var Alphabet = 'A'.To('Z') | 'a'.To('z');
+            var Numeric = '0'.To('9');
+
+            // 裸の識別子
+            var NakedID = ((Alphabet | '_') + (Alphabet | '_' | Numeric)._0Max())["identifier"];
+
+            // 裸の識別子を使う式
+            var NExp = new RecursionMatcher();
+
+            var NOption = ('[' + NExp["option_exp"] + ']')["option"];
+            var NGroup = ('(' + NExp["group_exp"] + ')')["group"];
+
+            var NOr = (NExp["or_left"] + '|' + NExp["or_right"])["or"];
+            var NAbove0 = (NExp["above0_exp"] + '*')["above0"];
+            var NAbove1 = (NExp["above1_exp"] + '+')["above1"];
+
+            var NAbove = NAbove0 | NAbove1;
+            var NotID = NOption | NGroup | EnclosedLiteral;
+
+            var NConnect = NExp + NExp;
+                //(NOr| NakedID) + NotID |
+                //NAbove + NotID |
+                //NOr + NotID |
+                //NOr + NotID |
+                //NOr + NotID |
+                //NOr + NotID |
+                //(NAbove | NotID) + (NOr | NAbove | NotID | NakedID);
+
+            NExp.Inner = NakedID | EnclosedLiteral |
+                NOr | NOption | NAbove | NGroup | NConnect;
+
+            var NRule = (NakedID["rule_name"] + "::=" + NExp["rule_exp"] + ';'._()._01())["rule"];
+            // 裸の識別子で定義されたBNF
+            var NakedBNF = Begin + NRule._1Max() + End;
+
+
+            return NakedBNF | EnclosedBNF;
+        }
+
+
+
+
+        public static string TagToString(string text, Match match)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            //foreach (var tagMatch in match.TagChildren)
+            //{
+            //    string value;
+
+            //    switch (tagMatch.Tag)
+            //    {
+            //    case "rule":
+            //        TagMatch[] items = tagMatch.TagChildren.ToArray();
+            //        var rule_name = TagToString(text, items[0]);
+            //        var rule_exp = TagToString(text, items[1]);
+            //        sb.Append($"var {rule_name} = {rule_exp};\r\n");
+            //        break;
+            //    case "identifier":
+            //        value = tagMatch.ToString(text);
+            //        value = value.Replace(' ', '_').Replace('-', '_');
+            //        sb.Append(value);
+            //        break;
+            //    case "or":
+            //        TagMatch[] or_items = tagMatch.TagChildren.ToArray();
+            //        var or_left = TagToString(text, or_items[0]);
+            //        var or_right = TagToString(text, or_items[1]);
+            //        sb.Append(or_left + "|" + or_right);
+            //        break;
+            //    case "option":
+            //        var option_exp = tagMatch.TagChildren.First();
+            //        sb.Append(TagToString(text, option_exp) + "._01()");
+            //        break;
+            //    case "above0":
+            //        var above0_exp = tagMatch.TagChildren.First();
+            //        sb.Append(TagToString(text, above0_exp) + "._0Max()");
+            //        break;
+            //    case "above1":
+            //        var above1_exp = tagMatch.TagChildren.First();
+            //        sb.Append(TagToString(text, above1_exp) + "._1Max()");
+            //        break;
+            //    case "group":
+            //        var group_exp = tagMatch.TagChildren.First();
+            //        sb.Append("(" + TagToString(text, group_exp) + ")");
+            //        break;
+            //    case "literal":
+            //        sb.Append(tagMatch.ToString(text));
+            //        break;
+            //    }
+            //}
+
+            return sb.ToString();
+        }
+
 
         private static bool OmitMode = false;
 
@@ -202,7 +440,7 @@ namespace LIME
             if (matchExists)
             {
                 // 最も早く出現し、かつその内で最も長いマッチを返す。
-                var match = Match.SelectBestMatch(exe.FinishedMatches);
+                var match = Match.SelectBestMatch(exe.FinishedMatches);//.ToOutputMatch();
 
                 var sbOutPut = new StringBuilder();
 
@@ -257,16 +495,20 @@ namespace LIME
                 //}
 
                 Debug.WriteLine(sbOutPut.ToString());
-                
-                var filteredMatch = match.ToOutputMatch_ByTag();
-                if(filteredMatch != null)
-                {
-                    WriteMatch(text, filteredMatch);
-                }
-                else
-                {
-                    WriteMatch(text, match);
-                }
+
+                var tagedTree = match.ToTagedTree();
+
+                WriteMatch(text, tagedTree);
+
+                //var filteredMatch = match.ToOutputMatch_ByTag();
+                //if(filteredMatch != null)
+                //{
+                //    WriteMatch(text, filteredMatch);
+                //}
+                //else
+                //{
+                //    WriteMatch(text, match);
+                //}
             }
             else
             {
@@ -288,6 +530,21 @@ namespace LIME
                 }
 
                 Debug.WriteLine(sbOutPut.ToString());
+            }
+        }
+
+        private static void WriteMatch(string text, MinimalMatch match)
+        {
+            WriteMatch(text, match, "");
+        }
+        private static void WriteMatch(string text, MinimalMatch match, string indent)
+        {
+            Debug.WriteLine(
+                    $"[{match.Begin}-{match.End}]{indent}{match.ToString(text)} [{match.Tag}]"
+                       );
+            foreach(var subMatch in match)
+            {
+                WriteMatch(text, subMatch, indent + "  ");
             }
         }
 
@@ -339,22 +596,14 @@ namespace LIME
             {
                 sbWork.Append("(" + debugName + ")");
             }
-            if (match is TagMatch tagMatch)
-            {
-                var tags = tagMatch.Tags;
-                int count = 0;
-                sbWork.Append("[");
-                foreach (var tag in tags)
-                {
-                    count++;
-                    if (count > 1)
-                    {
-                        sbWork.Append(",");
-                    }
-                    sbWork.Append(tag);
-                }
-                sbWork.Append("]");
-            }
+            //if (match is CaptureMatch captureMatch)
+            //{
+            //    var tag = captureMatch.Tag;
+            //    int count = 0;
+            //    sbWork.Append("[");
+            //    sbWork.Append(tag);
+            //    sbWork.Append("]");
+            //}
 
             sbWork.Append(" ");
             sbWork.Append(match.UniqID);

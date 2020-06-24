@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace LIME
 {
@@ -317,7 +318,9 @@ namespace LIME
         {
             if (_running_MatchToPos.ContainsKey(match))
             {
+                var pos = _running_MatchToPos[match];
                 _running_MatchToPos.Remove(match);
+                _running_PosToMatch.Remove(pos);
             }
         }
 
@@ -409,6 +412,9 @@ namespace LIME
         /// <param name="tabCount">タブ文字を空白何個に換算するか</param>
         public Executor(Matcher matcher, IEnumerable<char> text, int tabCount = 4)
         {
+            Matcher.ResetUniqID();
+            Match.ResetUniqID();
+
             // 列挙可能なだけの入力文字列を、シーク可能な列挙型で包む。
             _text = new BufferedEnumerator<char>(text);
 
@@ -703,6 +709,9 @@ namespace LIME
 
         #region Matchのインスタンス管理
 
+        /// <summary>参照カウントの最低値</summary>
+        private static int ReferenceCountBottom = 0;
+
         /// <summary>参照カウント</summary>
         private Dictionary<Match, int> _referenceCount
             = new Dictionary<Match, int>();
@@ -715,9 +724,12 @@ namespace LIME
         {
             if (_referenceCount.ContainsKey(match) == false)
             {
-                _referenceCount.Add(match, 0);
+                _referenceCount.Add(match, ReferenceCountBottom);
             }
-            _referenceCount[match] += 1;
+            else
+            {
+                _referenceCount[match] += 1;
+            }
         }
 
         /// <summary>
@@ -728,12 +740,16 @@ namespace LIME
         /// <param name="match">マッチ</param>
         public void ReferenceCountMinus(Match match)
         {
-            // マッチの参照カウントを減らす
-            _referenceCount[match] -= 1;
-
-            // マッチの参照カウントがゼロになった時
-            if (_referenceCount[match] == 0)
+            if(_referenceCount[match]<= (ReferenceCountBottom+1))
             {
+                foreach (var subMatch in match.SubMatches)
+                {
+                    // サブマッチも参照カウントを減らす
+                    subMatch.UnWrap(this);
+                }
+                // 参照カウントリストからマッチを削除する。
+                _referenceCount.Remove(match);
+
                 // 開始インデックスを取得する
                 int index = match.TextBegin;
                 // 開始リストからマッチを削除する
@@ -751,24 +767,72 @@ namespace LIME
                     Running_RemoveMatch(match);
                 }
 
-                // このインデックスから開始するマッチが無くなった時
-                // (さっき消したマッチが最後の１個だった時)
-                if (_beginList[index].Count == 0)
+                // 最新の末端マッチの長さが存在する時だけ
+                // 不要マッチの削除を行う
+                if(CurrentTurn ==  TurnKind.HasLenggthTurn)
                 {
-                    // このインデックスで終了するマッチ全てを調べる
-                    foreach (var item in _endList[index])
+                    // このインデックスから開始するマッチが無くなった時
+                    // (さっき消したマッチが最後の１個だった時)
+                    if (_beginList[index].Count == 0)
                     {
-                        // 右側が未結合(後続を待っている)の時
-                        if (item.RightConnection == Match.ConnectionStatus.NotConnect)
+                        // このインデックスで終了するマッチ全てを調べる
+                        foreach (var item in _endList[index])
                         {
-                            // item をアンラップする
-                            item.UnWrap(this);
+                            // 右側が未結合(後続を待っている)の時
+                            if (item.RightConnection == Match.ConnectionStatus.NotConnect)
+                            {
+                                foreach (var subMatch in item.SubMatches)
+                                {
+                                    // サブマッチも参照カウントを減らす
+                                    subMatch.UnWrap(this);
+                                }
+                            }
                         }
                     }
                 }
+            }
+            else
+            {
+                _referenceCount[match]--;
+            }
 
-                // 参照カウントリストからマッチを削除する。
-                _referenceCount.Remove(match);
+        }
+
+        public int ReferenceCount(Match match)
+        {
+            if(_referenceCount.ContainsKey(match) == false)
+            {
+                return -999;
+            }
+            return _referenceCount[match];
+        }
+
+        public void ViewMatchTree(Match match, string indent = "")
+        {
+            int refCount;
+            if (_referenceCount.ContainsKey(match) == false)
+            {
+                refCount = -999;
+            }
+            else
+            {
+                refCount = _referenceCount[match];
+            }
+
+            var typeName = match.GetType().Name;
+            typeName = typeName.Replace("LIME.", "");
+            typeName = typeName.Replace("Match", "");
+
+            var strChar = "";
+            if(match is CharMatch charMatch)
+            {
+                strChar = _text[charMatch.TextBegin].ToString();
+            }
+
+            Debug.WriteLine($"{indent}{typeName} {match.UniqID}({refCount}) {strChar}");
+            foreach (var subMatch in match)
+            {
+                ViewMatchTree(subMatch, indent + "  ");
             }
         }
 
@@ -812,6 +876,9 @@ namespace LIME
                 _endList.Add(endIndex, new HashSet<Match>());
             }
             _endList[match.TextEnd].Add(match);
+
+            // マッチの参照カウントを１にする
+            ReferenceCountPlus(match);
         }
 
 
@@ -837,6 +904,46 @@ namespace LIME
             return _getEnumerator_Body();
         }
 
+
+        private string TreeTextOld = "";
+        private string TreeTextNow = "";
+        private void DebugWriteMatchTree(int index = -1)
+        {
+            //if (index != -1)
+            //{
+            //    Debug.WriteLine($"index = {index}");
+            //}
+            //TreeTextNow = _root.ToTreeText(this);
+            //if (TreeTextOld != TreeTextNow)
+            //{
+            //    Debug.WriteLine(TreeTextNow);
+            //    TreeTextOld = TreeTextNow;
+            //}
+        }
+
+        /// <summary>
+        /// 生成された末端マッチの長さがゼロか否かを示すフラグ
+        /// </summary>
+        /// <remarks>
+        /// 結合の見込みの無い不要マッチを削除する際、
+        /// 生成された末端マッチの長さがゼロの時は削除をしてはいけない。
+        /// </remarks>
+        private enum TurnKind
+        {
+            /// <summary>
+            /// 生成された末端マッチの長さがゼロ
+            /// </summary>
+            ZeroLengthTurn,
+            /// <summary>
+            /// 生成された末端マッチには長さが有る
+            /// </summary>
+            HasLenggthTurn
+        }
+        /// <summary>
+        /// 生成された末端マッチの長さがゼロか否かを示すフラグ
+        /// </summary>
+        private TurnKind CurrentTurn = TurnKind.ZeroLengthTurn;
+
         /// <summary>
         /// マッチング処理の基幹部分。
         /// 入力を１文字ずつ消費して、ルートまでたどり着けたマッチの有無を返す。
@@ -852,9 +959,11 @@ namespace LIME
 
             _blankList = new SortedList<int, TextRange>();
 
-            foreach(var token in new TokenStream(_text))
+            
+            foreach (var token in new TokenStream(_text))
             {
                 index = token.Begin;
+                DebugWriteMatchTree(index);
 
                 // このインデックスから開始するマッチを保存するリストを作成する。
                 // (削除用)
@@ -880,6 +989,8 @@ namespace LIME
                 {
                 // 開始トークンの時
                 case TokenStream.TokenKind.Begin:
+                    CurrentTurn = TurnKind.ZeroLengthTurn;
+
                     // 全てのBeginマッチャーに入力文字を食わせる。
                     foreach (var beginMatcher in _beginMatcherList)
                     {
@@ -892,6 +1003,8 @@ namespace LIME
                 // 単語区切りトークンの時
                 case TokenStream.TokenKind.WordBegin:
                 case TokenStream.TokenKind.WordEnd:
+                    CurrentTurn = TurnKind.ZeroLengthTurn;
+
                     // 全てのWordBreakマッチャーに入力文字を食わせる。
                     // (文字列先頭も単語区切りと見なす為)
                     foreach (var wordBreakMatcher in _wordBreakMatcherList)
@@ -903,6 +1016,8 @@ namespace LIME
                     break;
                 // 長さゼロトークンの時
                 case TokenStream.TokenKind.ZeroLength:
+                    CurrentTurn = TurnKind.ZeroLengthTurn;
+
                     // 全ての長さ無しマッチャーに入力文字を食わせる。
                     foreach (var zeroLengthMatcher in _zeroLengthList)
                     {
@@ -913,7 +1028,8 @@ namespace LIME
                     break;
                 // 空白トークンの時
                 case TokenStream.TokenKind.SpaceArray:
-                    
+                    CurrentTurn = TurnKind.HasLenggthTurn;
+
                     // 空白をブランクリストに登録する
                     _blankList.Add(range.End, range);
 
@@ -944,6 +1060,8 @@ namespace LIME
                 // 改行トークンの時
                 case TokenStream.TokenKind.Cr:
                 case TokenStream.TokenKind.Lf:
+                    CurrentTurn = TurnKind.HasLenggthTurn;
+
                     // 改行をブランクリストに登録する
                     _blankList.Add(range.End, range);
 
@@ -959,6 +1077,8 @@ namespace LIME
 
                 // インデントトークンの時
                 case TokenStream.TokenKind.Indent:
+                    CurrentTurn = TurnKind.ZeroLengthTurn;
+
                     // 全てのインデントマッチャーに入力文字を食わせる。
                     foreach (var indentMatcher in _indentMatcherList)
                     {
@@ -970,6 +1090,8 @@ namespace LIME
 
                 // デデントトークンの時
                 case TokenStream.TokenKind.Dedent:
+                    CurrentTurn = TurnKind.ZeroLengthTurn;
+
                     // 全てのデデントマッチャーに指定個数だけデデント(長さゼロ)を食わせる。
                     foreach (var dedentMatcher in _dedentMatcherList)
                     {
@@ -981,6 +1103,8 @@ namespace LIME
 
                 // エラーデデントトークンの時
                 case TokenStream.TokenKind.DedentError:
+                    CurrentTurn = TurnKind.ZeroLengthTurn;
+
                     foreach (var errorDedentMatcher in _errorDedentMatcherList)
                     {
                         Match spaceMatch =
@@ -991,6 +1115,8 @@ namespace LIME
                 // 通常文字トークンの時
                 case TokenStream.TokenKind.OneChar:
                 case TokenStream.TokenKind.WordChar:
+                    CurrentTurn = TurnKind.HasLenggthTurn;
+
                     // 全ての末端マッチャーに入力文字を食わせる。
                     foreach (var charMatcher in _terminalList)
                     {
@@ -1002,6 +1128,8 @@ namespace LIME
                     break;
                 // 終了トークンの時
                 case TokenStream.TokenKind.End:
+                    CurrentTurn = TurnKind.ZeroLengthTurn;
+
                     // 全てのEndマッチャーに入力文字を食わせる。
                     foreach (var endMatcher in _endMatcherList)
                     {
@@ -1063,6 +1191,8 @@ namespace LIME
             // 未走行マッチが無くなるまで繰り返す
             while (_running_MatchToPos.Count > 0)
             {
+                DebugWriteMatchTree();
+
                 int currentLength = int.MaxValue;
 
                 var keys = _running_MatchToPos.Keys;
@@ -1172,6 +1302,7 @@ namespace LIME
         /// <param name="runningMatch"></param>
         void RunMatch(Matcher currentPos, Match runningMatch)
         {
+            DebugWriteMatchTree();
 
             // 元のマッチの長さを保持しておく
             int currentLength = runningMatch.TextLength;
@@ -1236,7 +1367,7 @@ namespace LIME
             }
         }
 
-
+        #if DEBUG
         public void WriteTreeText()
         {
             Matcher inner = null;
@@ -1248,10 +1379,12 @@ namespace LIME
             Debug.WriteLine(inner.ToTreeText(this));
 
         }
-        #endregion
+        #endif
+
+    #endregion
 
 
-        #region マッチの連続性判定
+#region マッチの連続性判定
 
         /// <summary>
         /// マッチの連続性を判定する。
@@ -1298,10 +1431,10 @@ namespace LIME
 
             return false;
         }
-        #endregion
+#endregion
 
     }
-    #endregion
+#endregion
 
 
 }

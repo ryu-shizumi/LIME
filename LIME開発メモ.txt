@@ -1,0 +1,169 @@
+2020/06/22
+	Longマッチャーがゼロ回に対応してないので、
+	ゼロ回以上指定の際に長さゼロ文字列と論理和で結合するようにする。
+
+
+
+
+キャプチャーの指定方法はブラケットで確定
+
+    // 「除算」のマッチャーを作る。(但し中身は空っぽ)
+    RecursionMatcher DivExp = new RecursionMatcher();
+
+    // 「除算」の中身を設定する。
+    DivExp.Inner = 
+        ((numbers | DivExp)["左辺"] + 
+        '/' + 
+        numbers["右辺"])["除算式"];
+
+Longマッチが早期に反応する問題。
+Longマッチの前に連結演算された時、先導要素 + 最長一致要素 という組をつくらないと、
+先導要素の前にある文字に最長一致が反応してマッチングが失敗してしまう。
+
+ReferenceCountMinusがうまく機能してない。
+サブマッチの参照カウントを減らせて無い。
+
+
+
+
+LongマッチャーをCaptureマッチャーでラップしてしまうと連結演算が効かなくなるので、
+Captureマッチャーを廃して、それぞれのマッチャーが独自にタグを持つようにする。
+
+Eitherマッチャーにタグが設定された場合、
+ReceiveMatch()で受け取ったinnerMatchをCaptureMatchでラップしてタグを設定する必要が発生する。
+
+マッチはCaptureMatchでラップするが、マッチャーにはCaptureMatcherは無い。
+
+if(Tag != null)
+{
+    return new CaptureMatch(executor, innerMatch, this, Tag).ToArray();
+}
+
+マッチ全てにタグを持たせ、Eitherマッチを新設する！
+HasInnerMatcherに用意したデフォルトのReceiveMatchでは、
+元のマッチャーが出力すべきマッチ型を返せないので、
+それぞれのマッチャーでタグ付きマッチを生成する必要がある。
+
+タグをつけたマッチャーをオリジナルとする。
+GetCopy() の中でTagもちゃんとコピーする。
+
+
+
+マッチャーそれぞれにタグを設定する方式を諦めて、
+Longマッチャーを素のLongマッチャーとタグ付きLongマッチャーの二本立てにする案。
+
+	
+
+
+マッチを発生させたクラスをマッチャーから知る方法
+	現行ではマッチャーをクラス別に作っている。
+	
+	改善案として、Matchをクラス別にするのではなく、同じクラスとし、
+	どのように振る舞うかを列挙型メンバで示す。
+
+
+LongHead と LongBody を紐付け、
+LongHead がマッチするまで LongBody に入力を受理させない仕組みをなんとか作る。
+と言うか、Headが無い状態でLongBodyが上げて来たマッチを握りつぶす。
+	LongHead
+		LongBody
+
+LongHead は LongBody を内包し、LongBody はLongHeadの参照を持つ。
+LongBody は内包要素からマッチを受け取った時、親要素たるLongHeadにマッチを上げる。
+LongHead はLongBody からマッチを受け取った時、
+
+
+タグに包まれたLongマッチャーの連結演算
+	連結演算の際、タグに包まれたLongマッチャーを検出したら、
+	LongHead[tag] + LongBody[tag] 
+
+
+
+
+
+
+
+
+Longマッチの不具合
+	'"' + (Cr | Lf).Not.AsLong + '"'; に文字列リテラルを与えた場合、
+	Longマッチャーが最初のダブルクォーテーションを拾ってしまう。
+	解決策として、左側に別のマッチャーを連結されたLongマッチャーを
+	別のマッチャー型とし、左側要素からマッチが発生しない限り、
+	Longマッチャー部を作動させない対処を行う。
+	
+	Longの右側に要素を追加された際には、右側マッチを確認出来次第、
+	Longへの追加を停止する。
+	右側要素に合わせて、追加済みLongの内包要素を末尾から順に削る処理も必要。
+
+HasActiveTail の改良
+	子要素が無い時は常にfalse
+	子要素があれば true か false かはインスタンスの状況次第。
+		子要素を持つMatch全てにHasActiveTailの実体となる変数を持たせる事になる。
+		子要素が無ければ実体となる変数は要らない。
+
+HassActiveTailMatch
+
+
+連結が発生する可能性のあるマッチャー
+	Long
+		末尾が増えた際、さっきまでの末尾を潰す
+	Loop
+		末尾が増えた際、さっきまでの末尾を潰す
+	Pair
+		Leftから上がってきたマッチのTailを潰す
+	
+            // 末尾のinnerの配下に追加可能なLongMatchがある時は追加不可にする
+            if (_inners[_inners.Count - 1] is LongOwnerMatch longOwner)
+            {
+                if (longOwner.HasActiveTail)
+                {
+                    longOwner.DisableTail(e);
+                }
+            }
+
+
+最長一致マッチャーの素案
+	
+	非ループ部・ループ部・非ループ部　という構成にする。
+		開始と終端まで含めて指定する必要がある。
+		開始を検知した後で無いとループ部で連結処理を行わない。
+
+		ループ中に終端からマッチが上がってきたらループを打ち切り、
+		比較処理を確定させてマッチを作って返す。
+		
+		'(' + 'A'.To('Z').LongAbove1() + ')'
+		
+		メリット
+			実装が比較的楽
+		デメリット
+		
+
+最小一致マッチは、自分を発生させたマッチャー上に、
+ワームホールマッチを残す。
+
+AliveTailプロパティ
+	後続受け入れ状態の最長一致マッチが末尾に居る時に、
+	その参照を返す。
+DisableTailメソッド
+	後続受け入れ状態の末尾に居る最長一致マッチを、
+	後続受け入れ不可状態にする。
+	最長一致マッチと対になるワームホールマッチを削除する。
+
+Pairマッチャー上での実装の変更点
+	左側マッチの AliveTailプロパティがtrueの時、
+	DisableTailメソッドで後続受け入れ不可状態にする。
+
+
+            if (HasActiveTail == false)
+            {
+                return;
+            }
+
+            var lastInner = _inners[_inners.Count - 1];
+
+            // 子要素に対する処理
+            if (lastInner.HasActiveTail)
+            {
+                lastInner.DisableTail(e);
+            }
+            HasActiveTail = false;

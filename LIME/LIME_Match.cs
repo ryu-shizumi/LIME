@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Text;
 
 namespace LIME
@@ -39,31 +41,31 @@ namespace LIME
     {
         private static int[] stopIds = { };
         private static List<int> StopIdList = new List<int>(stopIds);
-
-        public string UniqID
-        {
-            get { return "M" + this.UniqIndex().ToString(); }
-        }
-
+        
+        public string UniqID { get; private set; }
+        private static int _uniqNumber = 0;
         public Match()
         {
+            UniqID = $"M{_uniqNumber}";
+            _uniqNumber++;
         }
+        public static void ResetUniqID()
+        {
+            _uniqNumber = 0;
+        }
+
 
         /// <summary>
         /// このマッチを解体し、参照カウントを減らす。
         /// サブマッチ全てにも同じ効果がある。
         /// </summary>
         /// <param name="executor"></param>
-        public void UnWrap(Executor executor)
+        public virtual void UnWrap(Executor executor)
         {
-            foreach (var subMatch in SubMatches)
-            {
-                // 子要素の参照カウントを減らす
-                executor.ReferenceCountMinus(subMatch);
-            }
+            executor.ReferenceCountMinus(this);
         }
 
-
+        public int ParentCount { get; set; }
 
 
 
@@ -75,17 +77,16 @@ namespace LIME
         /// <summary>
         /// このマッチ結果を生成したマッチャー
         /// </summary>
-        public abstract Matcher Generator
-        { get; }
+        public Matcher Generator{ get; protected set; }
 
         private protected List<Match> _subMatches = new List<Match>();
         /// <summary>
         /// ループでマッチした各回の要素、または、子要素列でマッチした各要素。
         /// </summary>
-        public abstract IEnumerable<Match> SubMatches
-        { get; }
-
-
+        public virtual IEnumerable<Match> SubMatches
+        {
+            get { yield break; }
+        }
 
         /// <summary>
         /// このマッチが末端マッチか否かを取得する。
@@ -267,148 +268,7 @@ namespace LIME
             // 一番最初の要素を返す(暫定的な仕様)
             return resultMatches[0];
         }
-        #region 出力マッチの生成
-
-        /// <summary>
-        /// このマッチを出力マッチに変換する。
-        /// </summary>
-        /// <returns></returns>
-        public OutputMatch ToOutputMatch()
-        {
-            // 自分を元にして出力マッチを作る
-            var result = new OutputMatch(TextBegin, TextEnd);
-
-#if DEBUG
-            result._Generator = this.Generator;
-#endif
-
-            // 自分がタグマッチの時
-            if (this is TagMatch tagMatch)
-            {
-                // タグを設定する
-                result.Tags = tagMatch.Tags;
-            }
-
-            foreach (var subMatch in SubMatches)
-            {
-                result.Add(subMatch.ToOutputMatch());
-            }
-
-            return result;
-        }
-        #endregion
-
-
-        #region 出力マッチの生成(タグによる抽出)
-        /// <summary>
-        /// タグを持つマッチだけで出力マッチのツリーを作る。
-        /// 何かタグを持ちさえすればツリーに含む。
-        /// </summary>
-        /// <returns>出力マッチのツリーのルート</returns>
-        public OutputMatch ToOutputMatch_ByTag()
-        {
-            // 自分を元にしてルートとなる出力マッチを作る
-            var root = CreateOutputRoot();
-
-            // フィルター関数に
-            //「タグ比較されたら常にtrueを返す」(タグが存在するだけでtrue)を設定する。
-            ToOutputMatch_ByTag_Body(root, (tag) => true);
-
-            if (this is TagMatch)
-            {
-                return root;
-            }
-
-            if (root._subMatches.Count == 0)
-            {
-                return null;
-            }
-
-            return root;
-        }
-
-        /// <summary>
-        /// 任意のタグを持つマッチだけで出力マッチのツリーを作る。
-        /// </summary>
-        /// <param name="tags">任意のタグのセット</param>
-        /// <returns>出力マッチのツリーのルート</returns>
-        public OutputMatch ToOutputMatch_ByTag(HashSet<string> tags)
-        {
-            // 自分を元にしてルートとなる出力マッチを作る
-            var root = CreateOutputRoot();
-
-            // フィルター関数に
-            //「任意のタグを見つけたらtrueを返す」を設定する。
-            ToOutputMatch_ByTag_Body(root, (tag) => tags.Contains(tag));
-
-            return root;
-        }
-
-        /// <summary>
-        /// タグ有り要素限定出力マッチツリーのルート要素生成処理
-        /// </summary>
-        /// <returns>ルート要素</returns>
-        private OutputMatch CreateOutputRoot()
-        {
-            // 自分を元にしてルートとなる出力マッチを作る
-            var root = new OutputMatch(TextBegin, TextEnd);
-#if DEBUG
-            root._Generator = this.Generator;
-#endif
-            // 自分がタグマッチの時
-            if (this is TagMatch tagMatch)
-            {
-                // タグを設定する
-                root.Tags = tagMatch.Tags;
-            }
-
-            // 作ったルートを返す
-            return root;
-        }
-
-        /// <summary>
-        /// タグ有り要素限定出力マッチツリー生成処理の本体部
-        /// </summary>
-        /// <param name="currentParent"></param>
-        /// <param name="tagsCheckFunc"></param>
-        private void ToOutputMatch_ByTag_Body
-            (OutputMatch currentParent, Func<string, bool> tagsCheckFunc)
-        {
-            if (this is TagMatch tagMatch)
-            {
-                bool tagCheck = false;
-                foreach (var tag in tagMatch.Tags)
-                {
-                    if (tagsCheckFunc(tag))
-                    {
-                        tagCheck = true;
-                        break;
-                    }
-                }
-                if (tagCheck)
-                {
-                    // 自分を元にした出力マッチを作る
-                    var newOutputMatch = new OutputMatch(TextBegin, TextEnd);
-#if DEBUG
-                    newOutputMatch._Generator = this.Generator;
-#endif
-                    // タグを設定する
-                    newOutputMatch.Tags = tagMatch.Tags;
-
-                    // 新しい出力マッチを現在の親の子に追加する
-                    currentParent.Add(newOutputMatch);
-                    // 現在の親を、新しい出力マッチに差し替える
-                    currentParent = newOutputMatch;
-                }
-            }
-
-            foreach (var subMatch in SubMatches)
-            {
-                subMatch.ToOutputMatch_ByTag_Body(currentParent, tagsCheckFunc);
-            }
-        }
-
-        #endregion
+        
         public virtual Match[] ToArray()
         {
             return new Match[1] { this };
@@ -450,13 +310,151 @@ namespace LIME
             }
 
             return unit;
+        }
 
-            //// ここまで来たら何かがおかしいので例外を吐いておく
-            //throw new Exception();
+        #region タグ関連
+        
+        public MinimalMatch ToTagedTree()
+        {
+            var newList = new List<MinimalMatch>();
+            var tag = "";
+            if (this is CaptureMatch capture)
+            {
+                tag = capture.Tag;
+            }
+            this.BuildTagedTree(newList);
+            var newOutput = new MinimalMatch(
+                this.TextBegin, this.TextEnd,
+                newList.ToArray(), tag);
 
+            return newOutput;
+        }
+        public void BuildTagedTree(List<MinimalMatch> currentList)
+        {
+            foreach (var subMatch in SubMatches)
+            {
+                if (subMatch is CaptureMatch capture)
+                {
+                    var newList = new List<MinimalMatch>();
+
+                    subMatch.BuildTagedTree(newList);
+                    var newOutput = new MinimalMatch(
+                        subMatch.TextBegin, subMatch.TextEnd, 
+                        newList.ToArray(), capture.Tag);
+                    currentList.Add(newOutput);
+                }
+                else
+                {
+                    subMatch.BuildTagedTree(currentList);
+                }
+            }
+        }
+        #endregion
+    }
+
+    #endregion
+
+    public class MinimalMatch : IReadOnlyList<MinimalMatch>
+    {
+        public int Begin { get; private set; }
+        public int End { get; private set; }
+        public int Length
+        {
+            get { return End - Begin; }
+        }
+
+        public string Tag { get; private set; }
+
+        public MinimalMatch[] SubMatches { get; private set; }
+
+        public int Count
+        {
+            get { return SubMatches.Length; }
+        }
+
+        public MinimalMatch(int begin , int end, MinimalMatch[] subMatches, string tag)
+        {
+            Begin = begin;
+            End = end;
+            SubMatches = subMatches;
+            Tag = tag;
+        }
+
+        public MinimalMatch this[int i]
+        {
+            get
+            {
+                return SubMatches[i];
+            }
+        }
+
+        public IEnumerator<MinimalMatch> GetEnumerator()
+        {
+            foreach(var subMatch in SubMatches)
+            {
+                yield return subMatch;
+            }
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            foreach (var subMatch in SubMatches)
+            {
+                yield return subMatch;
+            }
+        }
+        public string ToString(string text)
+        {
+            return text.Substring(Begin, Length);
         }
     }
 
+    #region ロングマッチの親となり得るマッチ
+    public abstract class LongOwnerMatch : Match
+    {
+        public LongOwnerMatch()
+        { }
+
+        private protected bool _hasActiveChild = false;
+        public virtual bool HasActiveTail
+        {
+            get
+            {
+                return _hasActiveChild;
+            }
+            private protected set
+            {
+                _hasActiveChild = value;
+            }
+        }
+        public abstract void DisableTail(Executor e);
+
+        private protected void InnerDisable(Executor executor, Match inner)
+        {
+            // Leftの配下に追加可能なLongMatchがある時は追加不可にする
+            if (inner is LongOwnerMatch longOwner)
+            {
+                if (longOwner.HasActiveTail)
+                {
+                    longOwner.DisableTail(executor);
+                }
+            }
+        }
+
+        private protected void SetHasActiveTail(Match lastInner)
+        {
+            // 最後の内包要素が「追記可能な配下を持つ」時、
+            // このマッチ自体も「追記可能な配下を持つ」として扱う
+            if (lastInner is LongOwnerMatch longOwnerRight)
+            {
+                if (longOwnerRight.HasActiveTail)
+                {
+                    HasActiveTail = true;
+                }
+            }
+
+        }
+    }
     #endregion
 
     #region 出力用マッチ
@@ -465,9 +463,7 @@ namespace LIME
         private int _textBeginIndex;
         private int _textEndIndex;
         private List<OutputMatch> _inners;
-        private string[] _tags;
-
-        public Matcher _Generator;
+        private string _tag;
 
         public OutputMatch(int begin, int end)
         {
@@ -486,12 +482,16 @@ namespace LIME
 
         public override IEnumerable<Match> SubMatches
         {
-            get { return _inners; }
+            get
+            {
+                if(_inners == null) { yield break; }
+                foreach(var inner in _inners)
+                {
+                    yield return inner;
+                }
+            }
         }
-        public override Matcher Generator
-        {
-            get { return _Generator; }
-        }
+        
 
         public override ConnectionStatus LeftConnection
         {
@@ -518,17 +518,15 @@ namespace LIME
             return "";
         }
 
-        public string[] Tags
+        public string Tag
         {
-            get { return _tags; }
+            get { return _tag; }
             internal set
             {
-                _tags = value;
+                _tag = value;
             }
         }
 
-        //public OutputMatch this[string Tag]
-        //{ get; }
     }
     #endregion
 
@@ -539,7 +537,6 @@ namespace LIME
     public class CharMatch : Match
     {
         private int _textBeginIndex;
-        private CharMatcher _generator;
 
         /// <summary>
         /// 末端マッチャーから生成するコンストラクタ
@@ -548,9 +545,12 @@ namespace LIME
         /// <param name="generator">このマッチを生成した末端マッチャー</param>
         public CharMatch(Executor executor, int begin, CharMatcher generator)
         {
+
+            //Debug.WriteLine($"*{UniqID} Char {executor.Text[begin]}");
+
             _textBeginIndex = begin;
 
-            _generator = generator;
+            Generator = generator;
             _subMatches = new List<Match>();
             Char = executor.Text[begin];
             // 自分自身を実行器に登録する。
@@ -561,10 +561,7 @@ namespace LIME
         {
             get { yield break; }
         }
-        public override Matcher Generator
-        {
-            get { return _generator; }
-        }
+        
 
         public override ConnectionStatus LeftConnection
         {
@@ -604,12 +601,13 @@ namespace LIME
     public class ZeroLengthMatch : Match
     {
         private int _textBeginIndex;
-        private IZeroLength _generator;
 
         public ZeroLengthMatch(Executor executor, int begin, IZeroLength generator)
         {
+            //Debug.WriteLine($"*{UniqID} Zero");
+
             _textBeginIndex = begin;
-            _generator = generator;
+            Generator = (Matcher)generator;
 
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
@@ -618,10 +616,7 @@ namespace LIME
         {
             get { yield break; }
         }
-        public override Matcher Generator
-        {
-            get { return (Matcher)_generator; }
-        }
+        
         public override ConnectionStatus LeftConnection
         {
             get { return ConnectionStatus.Connected; }
@@ -657,7 +652,9 @@ namespace LIME
     {
         public BeginMatch(Executor executor, IZeroLength generator)
             : base(executor, 0, generator)
-        { }
+        {
+            //Debug.WriteLine($"*{UniqID} Begin");
+        }
 
         public override string ToString()
         {
@@ -671,7 +668,9 @@ namespace LIME
     {
         public EndMatch(Executor executor, int begin, IZeroLength generator)
             : base(executor, begin, generator)
-        { }
+        {
+            //Debug.WriteLine($"*{UniqID} End");
+        }
 
         public override string ToString()
         {
@@ -684,25 +683,38 @@ namespace LIME
     /// <summary>
     /// ペアマッチャーから発生するマッチ
     /// </summary>
-    public class PairMatch : Match
+    public class PairMatch : LongOwnerMatch
     {
         private Match _leftMatch;
         private Match _rightMatch;
 
-        private PairMatcher _generator;
-
-        public PairMatch(Executor executor, LeftMatch leftInner, RightMatch rightInner, PairMatcher generator)
+        public PairMatch(
+            Executor executor, LeftMatch leftInner, RightMatch rightInner, 
+            PairMatcher generator)
         {
-            _generator = generator;
+            //Debug.WriteLine($"*{UniqID} Pair ({leftInner.UniqID} {rightInner.UniqID})");
+
+            Generator = generator;
             _leftMatch = leftInner.Inner;
             _rightMatch = rightInner.Inner;
+
+            // Leftの配下に追加可能なLongMatchがある時は追加不可にする
+            InnerDisable(executor, _leftMatch);
+
+            // Rightの配下に追加可能なLongMatchがある時は
+            // Pairマッチ自体が追加可能となる
+            SetHasActiveTail(_rightMatch);
 
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
 
-            // 上がってきたマッチの参照カウントを増やす
-            executor.ReferenceCountPlus(leftInner);
-            executor.ReferenceCountPlus(rightInner);
+            //// 上がってきたマッチの参照カウントを増やす
+            //executor.ReferenceCountPlus(leftInner);
+            //executor.ReferenceCountPlus(rightInner);
+
+            //Debug.WriteLine("**PairMatch Created**");
+            //executor.ViewMatchTree(this);
+            //Debug.WriteLine("****");
         }
         public override IEnumerable<Match> SubMatches
         {
@@ -712,10 +724,7 @@ namespace LIME
                 yield return _rightMatch;
             }
         }
-        public override Matcher Generator
-        {
-            get { return _generator; }
-        }
+        
         public override ConnectionStatus LeftConnection
         {
             get { return ConnectionStatus.Connected; }
@@ -769,19 +778,43 @@ namespace LIME
         {
             get { return _rightMatch; }
         }
+
+        #region Longマッチの末尾処理
+
+        public override void DisableTail(Executor e)
+        {
+            if(HasActiveTail == false )
+            {
+                return;
+            }
+
+            // Rightの配下に追加可能なLongMatchがある時は追加不可にする
+            if (_rightMatch is LongOwnerMatch longOwner)
+            {
+                if (longOwner.HasActiveTail)
+                {
+                    longOwner.DisableTail(e);
+                }
+            }
+
+            HasActiveTail = false;
+        }
+        #endregion
+
     }
 
     /// <summary>
     /// ペアマッチャーの左に上がっていくマッチ
     /// </summary>
-    public class LeftMatch : Match
+    public class LeftMatch : LongOwnerMatch
     {
         private Match _inner;
-        private LeftMatcher _generator;
 
         public LeftMatch(Executor executor, Match inner, LeftMatcher generator)
         {
-            _generator = generator;
+            //Debug.WriteLine($"*{UniqID} Left ({inner.UniqID})");
+
+            Generator = generator;
             _inner = inner;
 
             // 自分自身を実行器に登録する。
@@ -802,10 +835,7 @@ namespace LIME
                 yield return _inner;
             }
         }
-        public override Matcher Generator
-        {
-            get { return _generator; }
-        }
+        
         public override ConnectionStatus LeftConnection
         {
             get { return ConnectionStatus.Connected; }
@@ -852,19 +882,41 @@ namespace LIME
             }
             return this;
         }
+
+        #region Longマッチの末尾処理
+        public override void DisableTail(Executor e)
+        {
+            if (HasActiveTail == false)
+            {
+                return;
+            }
+
+            // innerの配下に追加可能なLongMatchがある時は追加不可にする
+            if (_inner is LongOwnerMatch longOwner)
+            {
+                if (longOwner.HasActiveTail)
+                {
+                    longOwner.DisableTail(e);
+                }
+            }
+            HasActiveTail = false;
+        }
+        #endregion
+
     }
 
     /// <summary>
     /// ペアマッチャーの右に上がっていくマッチ
     /// </summary>
-    public class RightMatch : Match
+    public class RightMatch : LongOwnerMatch
     {
         private Match _inner;
-        private RightMatcher _generator;
 
         public RightMatch(Executor executor, Match inner, RightMatcher generator)
         {
-            _generator = generator;
+            //Debug.WriteLine($"*{UniqID} Right ({inner.UniqID})");
+
+            Generator = generator;
             _inner = inner;
 
             // 自分自身を実行器に登録する。
@@ -886,10 +938,7 @@ namespace LIME
                 yield return _inner;
             }
         }
-        public override Matcher Generator
-        {
-            get { return _generator; }
-        }
+
         public override ConnectionStatus LeftConnection
         {
             get { return ConnectionStatus.NotConnect; }
@@ -936,17 +985,332 @@ namespace LIME
             }
             return this;
         }
+
+        #region Longマッチの末尾処理
+        public override void DisableTail(Executor e)
+        {
+            if (HasActiveTail == false)
+            {
+                return;
+            }
+
+            // innerの配下に追加可能なLongMatchがある時は追加不可にする
+            if (_inner is LongOwnerMatch longOwner)
+            {
+                if (longOwner.HasActiveTail)
+                {
+                    longOwner.DisableTail(e);
+                }
+            }
+            HasActiveTail = false;
+        }
+        #endregion
+
     }
     #endregion
+
+
+    #region LongHeadMatch
+    public class LongHeadMatch : LongOwnerMatch
+    {
+        private Match _inner;
+        public LongHeadMatch(Executor executor, Match inner, LongHeadMatcher generator)
+        {
+            Generator = generator;
+            _inner = inner;
+            // 自分自身を実行器に登録する。
+            executor.RegisterMatch(this);
+
+            // 内包要素の参照カウントを加算する
+            executor.ReferenceCountPlus(inner);
+        }
+        public Match Inner
+        {
+            get { return _inner; }
+        }
+
+        public override IEnumerable<Match> SubMatches
+        {
+            get
+            {
+                yield return _inner;
+            }
+        }
+
+        public override ConnectionStatus LeftConnection
+        {
+            get { return ConnectionStatus.Connected; }
+        }
+        public override ConnectionStatus RightConnection
+        {
+            get { return ConnectionStatus.NotConnect; }
+        }
+        public override bool IsTerminal
+        {
+            get { return false; }
+        }
+
+
+        public override int TextBegin
+        {
+            get { return _inner.TextBegin; }
+        }
+        public override int TextEnd
+        {
+            get { return _inner.TextEnd; }
+        }
+        public override string ToString()
+        {
+            return _inner.ToString();
+        }
+        /// <summary>
+        /// このマッチと統合する別のマッチを指定して統合マッチに変化させる。
+        /// 停止マッチリストに在る自分の参照を統合マッチの参照に上書きする。
+        /// </summary>
+        /// <param name="executor">実行器</param>
+        /// <param name="other">統合する別のマッチ</param>
+        /// <returns>統合する要素が加わった後の自分</returns>
+        public override Match Unit(Executor executor, Match other)
+        {
+
+            if (other is LeftMatch otherLeft)
+            {
+                _inner = _inner.Unit(executor, otherLeft.Inner);
+            }
+            else
+            {
+                _inner = _inner.Unit(executor, other);
+            }
+            return this;
+        }
+
+        #region Longマッチの末尾処理
+        public override void DisableTail(Executor e)
+        {
+            if (HasActiveTail == false)
+            {
+                return;
+            }
+
+            // innerの配下に追加可能なLongMatchがある時は追加不可にする
+            if (_inner is LongOwnerMatch longOwner)
+            {
+                if (longOwner.HasActiveTail)
+                {
+                    longOwner.DisableTail(e);
+                }
+            }
+            HasActiveTail = false;
+        }
+        #endregion
+    }
+    #endregion
+
+
+    #region ロングマッチ
+    public class LongMatch : LongOwnerMatch
+    {
+        private List<Match> _inners;
+
+        public JumpMatch JumpSorce { get; private set; }
+
+        public bool IsActive { get; private set; }
+
+        public LongMatch(Executor executor, Match inner, LongMatcher generator)
+        {
+            //Debug.WriteLine($"*{UniqID} Long ({inner.UniqID})");
+
+            if (inner is LongOwnerMatch longOwner)
+            {
+                if(longOwner.HasActiveTail)
+                {
+                    _hasActiveChild = true;
+                }
+            }
+
+            Generator = generator;
+            _inners = new List<Match>();
+            _inners.Add(inner);
+
+            JumpSorce = new JumpMatch(executor, this);
+            // 跳躍マッチの現在位置をこのマッチを発生させたマッチャーに設定する。
+            executor.Staying_SetMatchPos(JumpSorce, generator);
+
+
+            // 自分自身を実行器に登録する。
+            executor.RegisterMatch(this);
+
+            // 内包要素の参照カウントを増やす
+            executor.ReferenceCountPlus(inner);
+        }
+
+        public void Add(Executor executor, Match inner)
+        {
+            // 末尾のinnerの配下に追加可能なLongMatchがある時は追加不可にする
+            InnerDisable(executor, _inners[_inners.Count - 1]);
+
+            _inners.Add(inner);
+            // 内包要素の参照カウントを増やす
+            executor.ReferenceCountPlus(inner);
+
+            // 追加するinnerの配下に追加可能なLongMatchがある時は
+            // 自分の HasActiveTail に反映する
+            if (inner is LongOwnerMatch newLongOwner)
+            {
+                if (newLongOwner.HasActiveTail)
+                {
+                    _hasActiveChild = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// サブマッチを列挙する
+        /// </summary>
+        public override IEnumerable<Match> SubMatches
+        {
+            get
+            {
+                return _inners;
+            }
+        }
+
+        public override ConnectionStatus LeftConnection
+        {
+            get { return ConnectionStatus.Connected; }
+        }
+        public override ConnectionStatus RightConnection
+        {
+            get { return ConnectionStatus.Connected; }
+        }
+        public override bool IsTerminal
+        {
+            get { return false; }
+        }
+        public override int TextBegin
+        {
+            get { return _inners[0].TextBegin; }
+        }
+        public override int TextEnd
+        {
+            get { return _inners[_inners.Count - 1].TextEnd; }
+        }
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+
+            foreach (var inner in _inners)
+            {
+                sb.Append(inner.ToString());
+            }
+
+            return sb.ToString();
+        }
+
+        private bool _isSelfActive = true;
+
+        public override bool HasActiveTail
+        {
+            get
+            {
+                bool isSelfActive = (JumpSorce != null);
+                return _hasActiveChild || isSelfActive;
+            }
+            private protected set
+            {
+                _hasActiveChild = value;
+            }
+        }
+
+        public override void DisableTail(Executor e)
+        {
+            if(_hasActiveChild)
+            {
+                // 末尾のinnerの配下に追加可能なLongMatchがある時は追加不可にする
+                if (_inners[_inners.Count - 1] is LongOwnerMatch longOwner)
+                {
+                    if (longOwner.HasActiveTail)
+                    {
+                        longOwner.DisableTail(e);
+                    }
+                }
+                _hasActiveChild = false;
+            }
+
+            // 自分に対する処理
+            if (JumpSorce != null)
+            {
+                JumpSorce.UnWrap(e);
+                JumpSorce = null;
+            }
+        }
+
+        public override void UnWrap(Executor executor)
+        {
+            // 自分に対する処理
+            if (JumpSorce != null)
+            {
+                JumpSorce.UnWrap(executor);
+                JumpSorce = null;
+            }
+            base.UnWrap(executor);
+        }
+
+    }
+    #endregion
+
+    #region 跳躍マッチ
+    public class JumpMatch : Match
+    {
+        public LongMatch JumpTarget { get; private set; }
+
+        public JumpMatch(Executor executor, LongMatch jumpTarget)
+        {
+            //Debug.WriteLine($"*{UniqID} Jump (Target={jumpTarget.UniqID})");
+
+            JumpTarget = jumpTarget;
+
+            // 自分自身を実行器に登録する。
+            executor.RegisterMatch(this);
+        }
+
+        public override bool IsTerminal
+        {
+            get { return false; }
+        }
+
+        public override int TextBegin
+        {
+            get { return JumpTarget.TextBegin; }
+        }
+
+        public override int TextEnd
+        {
+            get { return JumpTarget.TextBegin; }
+        }
+
+        public override ConnectionStatus LeftConnection
+        {
+            get { return ConnectionStatus.Connected; }
+        }
+        public override ConnectionStatus RightConnection
+        {
+            get { return ConnectionStatus.NotConnect; }
+        }
+
+    }
+    #endregion
+
+    
 
     #region ループマッチ
     /// <summary>
     /// ループマッチから完成品として上がっていくマッチ
     /// </summary>
-    public class LoopMatch : Match
+    public class LoopMatch : LongOwnerMatch
     {
         private List<Match> _inners;
-        private LoopMatcher _generator;
         public WaitingMatch PrevWaitingMatch
         { get; private set; }
 
@@ -956,10 +1320,18 @@ namespace LIME
         /// <param name="executor">実行器</param>
         /// <param name="inners">元のWaitingMatchの内包要素</param>
         /// <param name="generator">このマッチを生成したLoopマッチャー</param>
-        public LoopMatch(Executor executor, IEnumerable<Match> inners, LoopMatcher generator, WaitingMatch prev)
+        public LoopMatch(Executor executor, IEnumerable<Match> inners, 
+            LoopMatcher generator, WaitingMatch prev)
         {
+            var sb = new StringBuilder();
+            foreach(var inner in inners)
+            {
+                sb.Append($"{inner.UniqID} ");
+            }
+            //Debug.WriteLine($"*{UniqID} Loop ({sb.ToString()})");
+
             PrevWaitingMatch = prev;
-            _generator = generator;
+            Generator = generator;
             _inners = new List<Match>(inners);
 
             // 自分自身を実行器に登録する。
@@ -983,10 +1355,6 @@ namespace LIME
             }
         }
 
-        public override Matcher Generator
-        {
-            get { return _generator; }
-        }
         public override ConnectionStatus LeftConnection
         {
             get { return ConnectionStatus.Connected; }
@@ -1036,6 +1404,27 @@ namespace LIME
 
             return base.Unit(executor, other);
         }
+
+        #region Longマッチの末尾処理
+        public override void DisableTail(Executor e)
+        {
+            if (HasActiveTail == false)
+            {
+                return;
+            }
+
+            // 末尾のinnerの配下に追加可能なLongMatchがある時は追加不可にする
+            if (_inners[_inners.Count - 1] is LongOwnerMatch longOwner)
+            {
+                if (longOwner.HasActiveTail)
+                {
+                    longOwner.DisableTail(e);
+                }
+            }
+            HasActiveTail = false;
+        }
+        #endregion
+
     }
     #endregion
 
@@ -1043,10 +1432,10 @@ namespace LIME
     /// <summary>
     /// ループマッチャーの上で待機するマッチ
     /// </summary>
-    public class WaitingMatch : Match
+    public class WaitingMatch : LongOwnerMatch
     {
         private List<Match> _inners;
-        private LoopMatcher _generator;
+
         public WaitingMatch PrevWaitingMatch
         { get; private set; }
         /// <summary>
@@ -1057,7 +1446,9 @@ namespace LIME
         /// <param name="generator">このマッチを生成したLoopマッチャー</param>
         public WaitingMatch(Executor executor, Match firstMatch, LoopMatcher generator)
         {
-            _generator = generator;
+            //Debug.WriteLine($"*{UniqID} Waiting (First={firstMatch.UniqID})");
+
+            Generator = generator;
             _inners = new List<Match>();
             _inners.Add(firstMatch);
 
@@ -1077,9 +1468,29 @@ namespace LIME
         private WaitingMatch(Executor executor, WaitingMatch org, Match appendInner)
         {
             PrevWaitingMatch = org;
-            _generator = org._generator;
+            Generator = org.Generator;
             _inners = new List<Match>(org._inners);
+
+            // 末尾のinnerの配下に追加可能なLongMatchがある時は追加不可にする
+            if (_inners[_inners.Count - 1] is LongOwnerMatch longOwner)
+            {
+                if (longOwner.HasActiveTail)
+                {
+                    longOwner.DisableTail(executor);
+                }
+            }
+
             _inners.Add(appendInner);
+
+            // 追加するinnerの配下に追加可能なLongMatchがある時は
+            // 自分の HasActiveTail に反映する
+            if (appendInner is LongOwnerMatch newLongOwner)
+            {
+                if (newLongOwner.HasActiveTail)
+                {
+                    HasActiveTail = true;
+                }
+            }
 
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
@@ -1120,10 +1531,7 @@ namespace LIME
         {
             get { return _inners.Count; }
         }
-        public override Matcher Generator
-        {
-            get { return _generator; }
-        }
+        
         public override ConnectionStatus LeftConnection
         {
             get { return ConnectionStatus.Connected; }
@@ -1164,27 +1572,52 @@ namespace LIME
         /// <returns></returns>
         public LoopMatch Copy(Executor executor)
         {
-            return new LoopMatch(executor, _inners, _generator, PrevWaitingMatch);
+            return new LoopMatch(executor, _inners, (LoopMatcher)Generator, PrevWaitingMatch);
         }
+
+        #region Longマッチの末尾処理
+        public override void DisableTail(Executor e)
+        {
+            if (HasActiveTail == false)
+            {
+                return;
+            }
+
+            // 末尾のinnerの配下に追加可能なLongMatchがある時は追加不可にする
+            if (_inners[_inners.Count - 1] is LongOwnerMatch longOwner)
+            {
+                if (longOwner.HasActiveTail)
+                {
+                    longOwner.DisableTail(e);
+                }
+            }
+            HasActiveTail = false;
+        }
+        #endregion
+
     }
     #endregion
 
-    #region Tagマッチ
+    #region Captureマッチ
     /// <summary>
-    /// タグマッチャーから発生するマッチ。タグマッチャーからタグを受け継ぐ
+    /// Eitherマッチがタグを持つ時、上がってきたinnerMatchをラップする為のマッチ
     /// </summary>
-    public class TagMatch : Match
+    public class CaptureMatch : LongOwnerMatch
     {
         private Match _inner;
-        private TagMatcher _generator;
-        public readonly string[] Tags;
+        public string Tag { get; private set; }
 
-        public TagMatch(Executor executor, Match inner, TagMatcher generator)
+        public CaptureMatch(Executor executor, Match inner, Matcher generator, string tag)
         {
+            //Debug.WriteLine($"*{UniqID} Capture ({inner.UniqID})");
+
             _inner = inner;
-            _generator = generator;
-            Tags = new string[generator.Tags.Count];
-            generator.Tags.CopyTo(Tags);
+            Generator = generator;
+            Tag = tag;
+
+            // innerの配下に追加可能なLongMatchがある時は
+            // Tagマッチ自体が追加可能となる
+            SetHasActiveTail(inner);
 
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
@@ -1196,10 +1629,6 @@ namespace LIME
         public override IEnumerable<Match> SubMatches
         {
             get { yield return _inner; }
-        }
-        public override Matcher Generator
-        {
-            get { return _generator; }
         }
 
         public override ConnectionStatus LeftConnection
@@ -1227,6 +1656,25 @@ namespace LIME
             return _inner.ToString();
         }
 
+        #region Longマッチの末尾処理
+        public override void DisableTail(Executor e)
+        {
+            if (HasActiveTail == false)
+            {
+                return;
+            }
+
+            // innerの配下に追加可能なLongMatchがある時は追加不可にする
+            if (_inner is LongOwnerMatch longOwner)
+            {
+                if (longOwner.HasActiveTail)
+                {
+                    longOwner.DisableTail(e);
+                }
+            }
+            HasActiveTail = false;
+        }
+        #endregion
     }
     #endregion
 
@@ -1234,15 +1682,16 @@ namespace LIME
     /// <summary>
     /// ルートマッチャーで発生するマッチ。
     /// </summary>
-    public class RootMatch : Match
+    public class RootMatch : LongOwnerMatch
     {
         private Match _inner;
-        private RootMatcher _generator;
 
         public RootMatch(Executor executor, Match inner, RootMatcher generator)
         {
+            //Debug.WriteLine($"*{UniqID} Root ({inner.UniqID})");
+
             _inner = inner;
-            _generator = generator;
+            Generator = generator;
 
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
@@ -1254,10 +1703,6 @@ namespace LIME
         public override IEnumerable<Match> SubMatches
         {
             get { yield return _inner; }
-        }
-        public override Matcher Generator
-        {
-            get { return _generator; }
         }
 
         public override ConnectionStatus LeftConnection
@@ -1285,6 +1730,26 @@ namespace LIME
             return _inner.ToString();
         }
 
+        #region Longマッチの末尾処理
+
+        public override void DisableTail(Executor e)
+        {
+            if (HasActiveTail == false)
+            {
+                return;
+            }
+
+            // innerの配下に追加可能なLongMatchがある時は追加不可にする
+            if (_inner is LongOwnerMatch longOwner)
+            {
+                if (longOwner.HasActiveTail)
+                {
+                    longOwner.DisableTail(e);
+                }
+            }
+            HasActiveTail = false;
+        }
+        #endregion
     }
     #endregion
 
@@ -1292,7 +1757,7 @@ namespace LIME
     /// <summary>
     /// 開始インデックス・終了インデックス・位置が同じマッチを統合させて一つとして扱うマッチ
     /// </summary>
-    public class UnitMatch : Match
+    public class UnitMatch : LongOwnerMatch
     {
         private List<Match> _inners;
 
@@ -1311,20 +1776,42 @@ namespace LIME
             if (innerX.TextBegin != innerY.TextBegin) { throw new ArgumentOutOfRangeException(); }
             if (innerX.TextEnd != innerY.TextEnd) { throw new ArgumentOutOfRangeException(); }
 
+            Generator = innerX.Generator;
+
             _inners = new List<Match>(2);
             _inners.Add(innerX);
             _inners.Add(innerY);
+
+            _hasActiveChild = false;
+            foreach (var inner in _inners)
+            {
+                // innerの配下に追加可能なLongMatchがある時は
+                // Tagマッチ自体が追加可能となる
+                if(inner is LongOwnerMatch longOwner)
+                {
+                    if(longOwner.HasActiveTail)
+                    {
+                        _hasActiveChild = true;
+                    }
+                }
+            }
         }
         public void AddInner(Match newInner)
         {
             if (_inners[0].TextBegin != newInner.TextBegin) { throw new ArgumentOutOfRangeException(); }
             if (_inners[0].TextEnd != newInner.TextEnd) { throw new ArgumentOutOfRangeException(); }
             _inners.Add(newInner);
-        }
 
-        public override Matcher Generator
-        {
-            get { return _inners[0].Generator; }
+            if(_hasActiveChild == false)
+            {
+                if (newInner is LongOwnerMatch longOwner)
+                {
+                    if (longOwner.HasActiveTail)
+                    {
+                        _hasActiveChild = true;
+                    }
+                }
+            }
         }
 
         public override IEnumerable<Match> SubMatches
@@ -1399,6 +1886,31 @@ namespace LIME
                 return this;
             }
         }
+
+        #region Longマッチの末尾処理
+        public override void DisableTail(Executor e)
+        {
+
+            if (HasActiveTail == false)
+            {
+                return;
+            }
+
+            // 子要素に対する処理
+            foreach (var inner in _inners)
+            {
+                // innerの配下に追加可能なLongMatchがある時は追加不可にする
+                if (inner is LongOwnerMatch longOwner)
+                {
+                    if (longOwner.HasActiveTail)
+                    {
+                        longOwner.DisableTail(e);
+                    }
+                }
+            }
+            HasActiveTail = false;
+        }
+        #endregion
     }
     #endregion
 
@@ -1407,18 +1919,12 @@ namespace LIME
     {
         private int _textBeginIndex;
         private int _textEndIndex;
-        private Matcher _generator;
 
         public IndentDedentMatchBase(Executor executor, int begin, int end, Matcher generator)
         {
             _textBeginIndex = begin;
             _textEndIndex = end;
-            _generator = generator;
-        }
-
-        public override Matcher Generator
-        {
-            get { return _generator; }
+            Generator = generator;
         }
 
         public override IEnumerable<Match> SubMatches
@@ -1450,6 +1956,8 @@ namespace LIME
         {
             get { return ConnectionStatus.Connected; }
         }
+
+        
     }
     #endregion
 

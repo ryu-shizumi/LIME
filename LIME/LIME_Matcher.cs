@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 
 namespace LIME
@@ -66,6 +67,11 @@ namespace LIME
             return innerMatch.ToArray();
         }
 
+        public override string ToString()
+        {
+            var hash = new HashSet<RecursionMatcher>();
+            return ToString(hash);
+        }
         public abstract string ToString(HashSet<RecursionMatcher> hash);
 
         public abstract IEnumerable<Matcher> Inners { get; }
@@ -108,17 +114,19 @@ namespace LIME
     /// </remarks>
     public abstract class Matcher
     {
-        public static List<Matcher> Instances = new List<Matcher>();
-        public string UniqID
-        {
-            get { return "G" + this.UniqIndex().ToString(); }
-        }
-
+        public string UniqID { get; private set; }
+        private static int _uniqNumber = 0;
         public Matcher()
         {
-            Instances.Add(this);
+            UniqID = $"G{_uniqNumber}";
+            _uniqNumber++;
+        }
+        public static void ResetUniqID()
+        {
+            _uniqNumber = 0;
         }
 
+#if DEBUG
         public string ToTreeText()
         {
             var sb = new StringBuilder();
@@ -128,11 +136,12 @@ namespace LIME
 
             return sb.ToString();
         }
-        private void ToTreeText(StringBuilder sb, string header, HashSet<RecursionMatcher> hash)
+        private void ToTreeText(
+            StringBuilder sb, string header, HashSet<RecursionMatcher> hash)
         {
-            if(this is RecursionMatcher recurs)
+            if (this is RecursionMatcher recurs)
             {
-                if(hash.Contains(recurs))
+                if (hash.Contains(recurs))
                 {
                     return;
                 }
@@ -144,7 +153,7 @@ namespace LIME
 
             var name = this.GetType().Name.Replace("Matcher", "");
             var uniqID = "";
-            if(this.IsOriginal)
+            if (this.IsOriginal)
             {
                 uniqID = this.UniqID;
             }
@@ -162,6 +171,7 @@ namespace LIME
                 }
             }
         }
+
         public string ToTreeText(Executor executor)
         {
             var sb = new StringBuilder();
@@ -195,12 +205,17 @@ namespace LIME
             {
                 uniqID = this.UniqID + "(" + this.Original.UniqID + ")";
             }
+            var targetChar = "";
+            if(this is CharMatcher charMatcher)
+            {
+                targetChar = charMatcher.ToString();
+            }
 
             var stayings = executor.Staying_PosToMatch(this.Original);
             var stayIdArray = new string[stayings.Length];
-            for(int i = 0; i < stayings.Length; i++)
+            for (int i = 0; i < stayings.Length; i++)
             {
-                stayIdArray[i] = "停" +  stayings[i].UniqID;
+                stayIdArray[i] = "停" + stayings[i].UniqID;
             }
             var runings = executor.Running_PosToMatch(this.Original);
             var runIdArray = new string[runings.Length];
@@ -209,13 +224,13 @@ namespace LIME
                 runIdArray[i] = "走" + runings[i].UniqID;
             }
             var matches = "";
-            if((stayings.Length != 0)|| (runings.Length != 0))
+            if ((stayings.Length != 0) || (runings.Length != 0))
             {
                 matches = " " + string.Join(" ", stayIdArray) + " " +
                     string.Join(" ", runIdArray);
             }
 
-            var MatcherStateText = header + name + " " + uniqID + matches;
+            var MatcherStateText = $"{header} {name} {uniqID} {targetChar} {matches}";
             sb.AppendLine(MatcherStateText);
 
             if (this is HasInnerMatcher hasInner)
@@ -226,6 +241,7 @@ namespace LIME
                 }
             }
         }
+#endif
 
         protected Matcher _original = null;
         public Matcher Original
@@ -482,16 +498,47 @@ namespace LIME
         /// </summary>
         /// <param name="tag">タグ</param>
         /// <returns></returns>
-        public TagMatcher this[string tag]
+        public virtual Matcher this[string tag]
         {
             get
             {
-                return new TagMatcher(this, tag);
+                return new CaptureMatcher(this, tag);
             }
         }
         #endregion
 
+        #region 回数指定(できる限り長く)
+        /// <summary>
+        /// １回以上かつ、できる限り長く
+        /// </summary>
+        public LongMatcher Above1
+        {
+            get
+            {
+                if (this is LongMatcher)
+                {
+                    return (LongMatcher)(this.GetCopy());
+                }
 
+                return new LongMatcher(this.GetCopy());
+            }
+        }
+        /// <summary>
+        /// ０回以上かつ、できる限り長く
+        /// </summary>
+        public EitherMatcher Above0
+        {
+            get
+            {
+                if (this is LongMatcher)
+                {
+                    return "" | this;
+                }
+
+                return "" | new LongMatcher(this.GetCopy());
+            }
+        }
+        #endregion
 
         #region 回数指定
 
@@ -638,23 +685,7 @@ namespace LIME
 
         #endregion 回数指定
 
-        #region マッチ発生時イベント
-        /// <summary>
-        /// マッチ生成時に実行される関数
-        /// 
-        /// 第１引数 発生したマッチ
-        /// 第２引数 発生したマッチを握りつぶすか否か？
-        /// 
-        /// </summary>
-        public Func<Match, OK_Cancel> onMatchCreate =
-            (match) => OK_Cancel.OK;
-        #endregion
-
-        public enum OK_Cancel
-        {
-            OK,
-            Cancel
-        }
+        
 
         #region 検索処理
         /// <summary>
@@ -1102,22 +1133,22 @@ namespace LIME
         }
         #endregion
 
-        
+
     }
     #endregion
 
-    #region タグマッチャー
+    #region キャプチャーマッチャー
     /// <summary>
-    /// タグを付与されたマッチャー。
+    /// キャプチャー指定を示すマッチャー。
     /// </summary>
     /// <remarks>
-    /// このマッチャーが持つタグは生成されたマッチに与えられ、
-    /// 木構造のマッチからタグを指定して部分文字列を列挙する事ができる。
+    /// このマッチャーが持つ番号は生成されたマッチに与えられ、
+    /// インデクサで番号を指定してサブマッチにアクセスできる。
     /// </remarks>
-    public class TagMatcher : Matcher, IHasInner
+    public class CaptureMatcher : Matcher, IHasInner
     {
         private Matcher _inner;
-
+        public string Tag { get; private set; }
         public IEnumerable<Matcher> Inners
         {
             get
@@ -1126,34 +1157,17 @@ namespace LIME
             }
         }
 
-        private HashSet<string> _tags = new HashSet<string>();
-        public HashSet<string> Tags
-        {
-            get { return _tags; }
-        }
-
         /// <summary>
         /// コンストラクタ
         /// </summary>
         /// <param name="inner">内包要素</param>
         /// <param name="captureID">キャプチャーID</param>
-        public TagMatcher(Matcher inner, string tag)
+        public CaptureMatcher(Matcher inner, string tag)
         {
             this._inner = inner;
             // inner.Parent = this;
-            this._tags.Add(tag);
+            this.Tag = tag;
 
-            this.DebugName = "TagMatcher";
-        }
-        public TagMatcher(Matcher inner, IEnumerable<string> tags)
-        {
-            this._inner = inner;
-            // inner.Parent = this;
-
-            foreach (var tag in tags)
-            {
-                this._tags.Add(tag);
-            }
             this.DebugName = "TagMatcher";
         }
 
@@ -1178,15 +1192,9 @@ namespace LIME
         /// <param name="innerMatch">内包要素から上がってきたマッチ</param>
         public Match[] ReceiveMatch(Executor executor, Match innerMatch)
         {
-            var tagMatch = new TagMatch(executor, innerMatch, (TagMatcher)(this.Original));
+            var tagMatch = new CaptureMatch(executor, innerMatch, (CaptureMatcher)(this.Original), Tag);
 
             return tagMatch.ToArray();
-
-            //foreach (var parent in executor.GetParents(this.Original))
-            //{
-            //    // 全ての親マッチャーにマッチを報告する。
-            //    parent.ReceiveMatch(executor, tagMatch);
-            //}
         }
 
         /// <summary>
@@ -1200,8 +1208,7 @@ namespace LIME
 
         public override Matcher GetCopy()
         {
-            var tags = new HashSet<string>(_tags);
-            var result = new TagMatcher(_inner.GetCopy(), tags);
+            var result = new CaptureMatcher(_inner.GetCopy(), Tag);
             result.Original = Original;
             return result;
         }
@@ -1542,7 +1549,10 @@ namespace LIME
     /// </summary>
     public class CharMatcher : NotableMatcher, IReceiveChar
     {
-        private CharComparer _comparer;
+        //private CharComparer _comparer;
+        private CharRange[] _inners;
+
+        public bool IsNot { get; private set; }
 
         #region ToString
         /// <summary>
@@ -1552,19 +1562,57 @@ namespace LIME
         public override string ToString()
         {
             if (this.DebugName != null) { return this.DebugName; }
-            return _comparer.ToString();
+
+            if (_inners.Length == 0)
+            {
+                return "";
+            }
+            else if (_inners.Length == 1)
+            {
+                if (_inners[0] is CharRangeSimple simple)
+                {
+                    if (IsNot)
+                    {
+                        return string.Format("[^{0}]", simple.ToString());
+                    }
+                    else
+                    {
+                        return simple.ToString();
+                    }
+                }
+                else
+                {
+                    var minmax = (CharRangeMinMax)(_inners[0]);
+                    if (IsNot)
+                    {
+                        return string.Format("[^{0}-{1}]", minmax.Min, minmax.Max);
+                    }
+                    else
+                    {
+                        return string.Format("[{0}-{1}]", minmax.Min, minmax.Max);
+                    }
+                }
+            }
+            else
+            {
+                var sb = new StringBuilder();
+
+                sb.Append("[");
+                if (IsNot)
+                {
+                    sb.Append("^");
+                }
+
+                foreach (var inner in _inners)
+                {
+                    sb.Append(inner.ToString());
+                }
+
+                sb.Append("]");
+                return sb.ToString();
+            }
         }
         #endregion
-
-        /// <summary>
-        /// 文字比較器を指定するコンストラクタ
-        /// </summary>
-        /// <param name="func">判定関数</param>
-        /// <param name="not">否定フラグ</param>
-        public CharMatcher(CharComparer comparer)
-        {
-            _comparer = comparer;
-        }
 
         #region 糖衣構文コンストラクタ
 
@@ -1575,22 +1623,11 @@ namespace LIME
         /// <param name="not">否定フラグ(デフォルトは否定しない)</param>
         public CharMatcher(char c, bool not = false)
         {
-            _comparer = SimpleComparer.GetInstance(c, not);
-        }
+            _inners = new CharRange[1];
+            _inners[0] = new CharRangeSimple(c);
+            IsNot = not;
 
-        /// <summary>
-        /// 文字セットを指定するコンストラクタ
-        /// </summary>
-        /// <param name="chars">ヒットと判定させたい文字セット</param>
-        /// <param name="not">否定フラグ(デフォルトは否定しない)</param>
-        public CharMatcher(IEnumerable<char> chars, bool not = false)
-        {
-            var comp = new MultiComparer();
-            foreach (var c in chars)
-            {
-                comp.Add(SimpleComparer.GetInstance(c, not));
-            }
-            _comparer = comp;
+            //_comparer = SimpleComparer.GetInstance(c, not);
         }
 
         /// <summary>
@@ -1601,10 +1638,37 @@ namespace LIME
         /// <param name="not">否定フラグ(デフォルトは否定しない)</param>
         public CharMatcher(char min, char max, bool not = false)
         {
-            _comparer = new RangeComparer(min, max, not);
+            _inners = new CharRange[1];
+            _inners[0] = new CharRangeMinMax(min, max);
+            IsNot = not;
+
+            //_comparer = new RangeComparer(min, max, not);
+        }
+        /// <summary>
+        /// 文字セットを指定するコンストラクタ
+        /// </summary>
+        /// <param name="chars">ヒットと判定させたい文字セット</param>
+        /// <param name="not">否定フラグ(デフォルトは否定しない)</param>
+        public CharMatcher(IEnumerable<char> chars, bool not = false)
+        {
+            var list = new List<CharRangeSimple>();
+            foreach (var c in chars)
+            {
+                list.Add(new CharRangeSimple(c));
+            }
+
+            _inners = list.ToArray();
+            IsNot = not;
         }
 
+
         #endregion
+
+        public CharMatcher(CharRange[] inners, bool not = false)
+        {
+            _inners = inners;
+            IsNot = not;
+        }
 
         #region 演算子オーバーロード(論理和)
         /// <summary>
@@ -1619,10 +1683,13 @@ namespace LIME
             {
                 throw new ArgumentNullException();
             }
-            var comp = a._comparer | b._comparer;
 
-            var result = new CharMatcher(comp);
-            return result;
+            if (a.IsNot != b.IsNot)
+            {
+                throw new ArgumentException("[x]と[^x]は論理和で結合できません。");
+            }
+
+            return new CharMatcher(a._inners.Add(b._inners), a.IsNot);
         }
         public static CharMatcher operator |(CharMatcher a, char c)
         {
@@ -1630,10 +1697,7 @@ namespace LIME
             {
                 throw new ArgumentNullException();
             }
-            var comp = a._comparer | SimpleComparer.GetInstance(c, false);
-
-            var result = new CharMatcher(comp);
-            return result;
+            return new CharMatcher(a._inners.Add(new CharRangeSimple(c)), a.IsNot);
         }
         public static CharMatcher operator |(char c, CharMatcher a)
         {
@@ -1641,11 +1705,13 @@ namespace LIME
             {
                 throw new ArgumentNullException();
             }
-            var comp = a._comparer | SimpleComparer.GetInstance(c, false);
 
-            var result = new CharMatcher(comp);
-            return result;
+            return new CharMatcher((new CharRangeSimple(c)).Add(a._inners), a.IsNot);
         }
+
+
+
+
         #endregion
 
         /// <summary>
@@ -1655,7 +1721,7 @@ namespace LIME
         {
             get
             {
-                return new CharMatcher(_comparer.GetNotCopy());
+                return new CharMatcher(_inners.GetCopy(), !IsNot);
             }
         }
 
@@ -1666,15 +1732,46 @@ namespace LIME
         public Match ReceiveChar(Executor executor, int index)
         {
             var text = executor.Text;
+            char c = text[index];
+            bool matched;
 
-            var result = _comparer.IsMatch(text[index]);
-            if (result == false)
+            if (IsNot)
+            {
+                matched = true;
+
+                // 否定されていれば、要素のどれかに合致してはいけない
+                foreach (var inner in _inners)
+                {
+                    if (inner.IsMatch(c))
+                    {
+                        matched = false;
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                matched = false;
+
+                // 否定されてなければ、要素の内どれかであれば良い
+                foreach (var inner in _inners)
+                {
+                    if (inner.IsMatch(c))
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+
+            if (matched)
+            {
+                return new CharMatch(executor, index, this);
+            }
+            else
             {
                 return null;
             }
-
-            var newMatch = new CharMatch(executor, index, this);
-            return newMatch;
         }
 
 
@@ -1684,7 +1781,7 @@ namespace LIME
         }
         public override NotableMatcher GetNotableCopy()
         {
-            var result = new CharMatcher(_comparer);
+            var result = new CharMatcher(_inners, IsNot);
             result.Original = Original;
             return result;
         }
@@ -1692,322 +1789,89 @@ namespace LIME
 
     #endregion
 
-    #region 文字比較器
-
-    /// <summary>
-    /// 入力された１文字との比較を行う文字比較器クラス
-    /// </summary>
-    public abstract class CharComparer
+    #region 文字範囲
+    public interface ICompareChar
     {
-        protected bool _not;
+        bool IsMatch(char c);
+    }
+
+    public abstract class CharRange : ICompareChar
+    {
+        public abstract char Min { get; }
+        public abstract char Max { get; }
+
         public abstract bool IsMatch(char c);
 
-        public abstract string ToStringBody();
-
-        public override string ToString()
-        {
-            return "[" + ToStringBody() + "]";
-        }
-
-        public bool IsNot
-        {
-            get { return _not; }
-        }
-        public abstract CharComparer GetCopy();
-        public abstract CharComparer GetNotCopy();
-
-        public static MultiComparer operator |(CharComparer a, CharComparer b)
-        {
-            var result = new MultiComparer();
-            result.Add(a);
-            result.Add(b);
-            return result;
-        }
+        public abstract CharRange GetCopy();
     }
 
-    /// <summary>
-    /// 単純な文字比較を行う文字比較器
-    /// </summary>
-    /// <remarks>
-    /// 
-    /// 'A'.Not | 'B'.Not に"C"とか"X"とかを入力した時に、
-    /// ABそれぞれからマッチが上がるのは避けたい。
-    /// 
-    /// SimpleComparerとSimpleNotComparerは使い回す。
-    /// SimpleComparerとSimpleNotComparerのインスタンスを管理する必要がある。
-    /// 文字１個がNotされると別インスタンスになる。
-    /// 論理和されると新造されたMultiComparerを内蔵するCharMatcherが生成される。
-    /// 
-    /// </remarks>
-    public class SimpleComparer : CharComparer
+    public class CharRangeSimple : CharRange, ICompareChar
     {
-        private static Dictionary<char, SimpleComparer>
-            instaces = new Dictionary<char, SimpleComparer>();
-        private static Dictionary<char, SimpleComparer>
-            notInstaces = new Dictionary<char, SimpleComparer>();
+        private char _c;
+        public override char Min
+        {
+            get { return _c; }
+        }
+        public override char Max
+        {
+            get { return _c; }
+        }
 
-        public char _c;
-        private SimpleComparer(char c, bool not)
+        public CharRangeSimple(char c)
         {
             _c = c;
-            _not = not;
         }
-
-        /// <summary>
-        /// インスタンスを返すファクトリーメソッド
-        /// </summary>
-        /// <param name="c"></param>
-        /// <returns></returns>
-        public static SimpleComparer GetInstance(char c, bool not)
-        {
-            Dictionary<char, SimpleComparer> dict;
-            if (not)
-            {
-                dict = notInstaces;
-            }
-            else
-            {
-                dict = instaces;
-            }
-
-            if (dict.ContainsKey(c) == false)
-            {
-                dict.Add(c, new SimpleComparer(c, not));
-            }
-
-            return dict[c];
-        }
-
         public override bool IsMatch(char c)
         {
-            if (_not)
-            {
-                return !(c == _c);
-            }
-            else
-            {
-                return c == _c;
-            }
-        }
-        public override string ToStringBody()
-        {
-            var c = "";
-            switch(_c)
-            {
-            case '\r':
-                c = "\\r";
-                break;
-            case '\n':
-                c = "\\n";
-                break;
-            case '\t':
-                c = "\\t";
-                break;
-            default:
-                c = _c.ToString();
-                break;
-            }
-
-            if(_not)
-            {
-                return "^" + c;
-            }
-            return c;
-        }
-
-        public override CharComparer GetCopy()
-        {
-            return this;
-        }
-        public override CharComparer GetNotCopy()
-        {
-            return GetInstance(_c, !_not);
-        }
-    }
-
-
-
-    /// <summary>
-    /// 文字範囲との比較を行う文字比較器
-    /// </summary>
-    public class RangeComparer : CharComparer
-    {
-        public char Min { get; private set; }
-        public char Max { get; private set; }
-
-        public RangeComparer(char min, char max, bool not)
-        {
-            Min = min;
-            Max = max;
-            _not = not;
-        }
-
-        public override bool IsMatch(char c)
-        {
-            if (_not)
-            {
-                return (c < Min) || (Max < c);
-            }
-            else
-            {
-                return (Min <= c) && (c <= Max);
-            }
-        }
-
-        public override string ToStringBody()
-        {
-            if(_not)
-            {
-                return "^(" + Min.ToString() + "-" + Max.ToString() + ")";
-            }
-
-            return "(" + Min.ToString() + "-" + Max.ToString() + ")";
-        }
-        public override CharComparer GetCopy()
-        {
-            return new RangeComparer(Min, Max, _not);
-        }
-        public override CharComparer GetNotCopy()
-        {
-            return new RangeComparer(Min, Max, !_not);
-        }
-
-    }
-
-    /// <summary>
-    /// 内部に複数の文字比較器を内蔵する文字比較器
-    /// </summary>
-    public class MultiComparer : CharComparer
-    {
-        private List<CharComparer> _comparers;
-
-        public MultiComparer()
-        {
-            _comparers = new List<CharComparer>();
-        }
-        public MultiComparer(CharComparer x, CharComparer y)
-        {
-            _comparers = new List<CharComparer>();
-            if (x is MultiComparer multiX)
-            {
-                _comparers.AddRange(multiX._comparers);
-            }
-            else
-            {
-                _comparers.Add(x);
-            }
-
-            if (y is MultiComparer multiY)
-            {
-                _comparers.AddRange(multiY._comparers);
-            }
-            else
-            {
-                _comparers.Add(y);
-            }
-        }
-        public void Add(CharComparer comp)
-        {
-            if (comp is MultiComparer multiComp)
-            {
-                _comparers.AddRange(multiComp._comparers);
-            }
-            else
-            {
-                _comparers.Add(comp);
-            }
-        }
-
-        public override bool IsMatch(char c)
-        {
-            foreach (var comparer in _comparers)
-            {
-                if (comparer.IsMatch(c))
-                {
-                    return true;
-                }
-            }
-            return false;
+            return _c == c;
         }
         public override string ToString()
         {
-            List<CharComparer> list = new List<CharComparer>();
-            List<CharComparer> notList = new List<CharComparer>();
-            foreach (var comparer in _comparers)
-            {
-                if (comparer.IsNot)
-                {
-                    notList.Add(comparer);
-                }
-                else
-                {
-                    list.Add(comparer);
-                }
-            }
-
-            var sb = new StringBuilder();
-            if (list.Count == 0)
-            {
-                sb.Append("[^");
-                // notListだけ集計する
-                foreach (var item in list)
-                {
-                    sb.Append(item.ToString());
-                }
-                sb.Append("]");
-            }
-            else if (notList.Count == 0)
-            {
-                sb.Append("[");
-                // listだけ集計する
-                foreach (var item in notList)
-                {
-                    sb.Append(item.ToString());
-                }
-                sb.Append("]");
-            }
-            else
-            {
-                sb.Append("([^");
-                // notListだけ集計する
-                foreach (var item in list)
-                {
-                    sb.Append(item.ToString());
-                }
-                sb.Append("]|[");
-
-                // listだけ集計する
-                foreach (var item in notList)
-                {
-                    sb.Append(item.ToString());
-                }
-                sb.Append("])");
-            }
-
-            return sb.ToString();
+            if (_c == '\r') { return "\\r"; }
+            if (_c == '\n') { return "\\n"; }
+            return _c.ToString();
         }
-        public override string ToStringBody()
+        public override CharRange GetCopy()
         {
-            throw new NotImplementedException();
+            return new CharRangeSimple(_c);
         }
-        public override CharComparer GetCopy()
+    }
+
+
+    public class CharRangeMinMax : CharRange, ICompareChar
+    {
+        private char _min;
+        private char _max;
+        public override char Min
         {
-            var result = new MultiComparer();
-            result._comparers.AddRange(_comparers);
-            return result;
+            get { return _min; }
         }
-        public override CharComparer GetNotCopy()
+        public override char Max
         {
-            var result = new MultiComparer();
-            foreach (var comp in _comparers)
-            {
-                result._comparers.Add(comp.GetNotCopy());
-            }
-            return result;
+            get { return _max; }
+        }
+        public CharRangeMinMax(char min, char max)
+        {
+            _min = min;
+            _max = max;
+        }
+
+        public override bool IsMatch(char c)
+        {
+            if (c < _min) { return false; }
+            if (_max < c) { return false; }
+            return true;
+        }
+        public override string ToString()
+        {
+            return string.Format("{0}-{1}", _min, _max);
+        }
+        public override CharRange GetCopy()
+        {
+            return new CharRangeMinMax(_min, _max);
         }
     }
     #endregion
-
 
     #region 長さゼロマッチャー
     public class ZeroLengthMatcher : Matcher, IZeroLength
@@ -2033,10 +1897,173 @@ namespace LIME
     }
     #endregion
 
+    #region ロングマッチャーの先頭に立つマッチャー
+    public class LongHeadMatcher : HasInnerMatcher
+    {
+        private Matcher _inner;
+
+        public LongHeadMatcher(Matcher inner)
+        {
+            _inner = inner;
+        }
+        public override IEnumerable<Matcher> Inners
+        {
+            get
+            {
+                yield return _inner;
+            }
+        }
+
+        public override Matcher GetCopy()
+        {
+            return new LongHeadMatcher(_inner.GetCopy());
+        }
+
+        public override string ToString(HashSet<RecursionMatcher> hash)
+        {
+            if (this.DebugName != null) { return this.DebugName; }
+
+            string innerString = null;
+            if (_inner is IHasInner i)
+            {
+                innerString = i.ToString(hash);
+            }
+            else
+            {
+                innerString = _inner.ToString();
+            }
+
+            return innerString;
+        }
+        public override Match[] ReceiveMatch(Executor executor, Match innerMatch)
+        {
+            var longHeadMatch = new LongHeadMatch(executor, innerMatch, this);
+            return longHeadMatch.ToArray();
+        }
+    }
+    #endregion
+
+    #region ロングマッチャー
+    /// <summary>
+    /// 最長一致するマッチャー
+    /// </summary>
+    public class LongMatcher : HasInnerMatcher
+    {
+        private Matcher _inner;
+
+        public Matcher Body
+        {
+            get { return _inner; }
+        }
+
+        public LongMatcher(Matcher body)
+        {
+            _inner = body;
+        }
+
+        public override IEnumerable<Matcher> Inners
+        {
+            get
+            {
+                yield return _inner;
+            }
+        }
+
+        public override Match[] ReceiveMatch(Executor executor, Match innerMatch)
+        {
+            var stayMatches = executor.Staying_PosToMatch(this.Original);
+
+            var result = new List<Match>();
+
+            if (stayMatches.Length == 0)
+            {
+                var longMatch = new LongMatch(executor, innerMatch, this);
+                result.Add(longMatch);
+            }
+            else
+            {
+                //
+                // 跳躍マッチが指す最長一致マッチに新規要素を接続する処理
+                //
+                foreach (Match stayMatch in stayMatches)
+                {
+                    var jumpMatch = (JumpMatch)stayMatch;
+
+                    var longMatch = jumpMatch.JumpTarget;
+
+                    // 文字範囲が連続しているマッチの時
+                    if (executor.IsMatchContinuing(longMatch, innerMatch))
+                    {
+                        longMatch.Add(executor, innerMatch);
+                    }
+                }
+            }
+
+            return result.ToArray();
+        }
+
+        public override Matcher GetCopy()
+        {
+            var innerCopy = _inner?.GetCopy();
+            var result = new LongMatcher(innerCopy);
+            result.Original = Original;
+            return result;
+        }
+
+        #region ToString
+        /// <summary>
+        /// このインスタンスが指し示すパターンを文字列化する。
+        /// </summary>
+        /// <returns></returns>
+        public override string ToString()
+        {
+            if (this.DebugName != null) { return this.DebugName; }
+
+            return this.ToString(new HashSet<RecursionMatcher>());
+        }
+
+        public override string ToString(HashSet<RecursionMatcher> hash)
+        {
+            if (this.DebugName != null) { return this.DebugName; }
+            StringBuilder sb = new StringBuilder();
+
+            sb.Append("(");
+            string innerString = null;
+            if (_inner is IHasInner i)
+            {
+                innerString = i.ToString(hash);
+            }
+            else
+            {
+                innerString = _inner.ToString();
+            }
+
+            sb.Append(innerString);
+            sb.Append(")");
+
+            sb.Append("{");
+            sb.Append("Long");
+            sb.Append("}");
+            sb.Append(" ");
+            sb.Append(UniqID);
+
+            return sb.ToString();
+        }
+        #endregion
+
+
+    }
+    #endregion
+
     #region ループマッチャー
     /// <summary>
     /// ループマッチャー
     /// </summary>
+    /// <remarks>
+    /// 素直に使うと指数関数的に計算量が増加してしまうので、
+    /// 
+    /// 
+    /// </remarks>
     public class LoopMatcher : HasInnerMatcher, IZeroLength
     {
         private Matcher _inner;
@@ -2141,7 +2168,8 @@ namespace LIME
                 var waitingMatch = (WaitingMatch)stayMatch;
 
                 // 文字範囲が連続しているマッチの時
-                if (waitingMatch.TextEnd == innerMatch.TextBegin)
+                //if (waitingMatch.TextEnd == innerMatch.TextBegin)
+                if ( executor.IsMatchContinuing(waitingMatch, innerMatch))
                 {
                     // 新要素が追加された状態の待機マッチを作る
                     var newWaitingMatch = waitingMatch.CreateAppendedInstance
@@ -2166,8 +2194,12 @@ namespace LIME
                     // 最大回数に達した時
                     if (loopedCount == _max)
                     {
+                        //Debug.WriteLine("<<< RemoveWaitingMatch >>>");
+                        //executor.ViewMatchTree(newWaitingMatch);
+
                         // 待機マッチ を消去する。
                         newWaitingMatch.UnWrap(executor);
+                        //Debug.WriteLine("<<<  >>>");
                     }
                 }
             }
@@ -2370,7 +2402,8 @@ namespace LIME
                 // このPairマッチャーに待機してるLeftマッチ同士を統合する
 
                 // このPairマッチャーに待機してるLeftマッチを取得する
-                var leftStayMatch = (LeftMatch)(executor.Staying_FindMatch(this, leftMatch.TextBegin, leftMatch.TextEnd));
+                var leftStayMatch = (LeftMatch)(executor.Staying_FindMatch
+                    (this, leftMatch.TextBegin, leftMatch.TextEnd));
 
                 // 結合対象となるstayMatchが無い時
                 if (leftStayMatch == null)
@@ -2423,8 +2456,13 @@ namespace LIME
                 // 右から上がってきたマッチに合う相手が居なかった時
                 if (pairingSuccess == false)
                 {
+                    //Debug.WriteLine("----RemoveRightMatch----");
+                    //executor.ViewMatchTree(rightMatch);
+
                     // 上がってきたマッチを処分する
                     rightMatch.UnWrap(executor);
+
+                    //Debug.WriteLine("--------");
                 }
             }
 
