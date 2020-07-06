@@ -56,13 +56,13 @@ namespace LIME
 
 
         /// <summary>
-        /// このマッチを解体し、参照カウントを減らす。
+        /// このマッチを解体し、親カウントを減らす。
         /// サブマッチ全てにも同じ効果がある。
         /// </summary>
         /// <param name="executor"></param>
         public virtual void UnWrap(Executor executor)
         {
-            executor.ReferenceCountMinus(this);
+            executor.ParentsCountMinus(this);
         }
 
         public int ParentCount { get; set; }
@@ -325,7 +325,7 @@ namespace LIME
             this.BuildTagedTree(newList);
             var newOutput = new MinimalMatch(
                 this.TextBegin, this.TextEnd,
-                newList.ToArray(), tag);
+                newList.ToArray(), tag, this);
 
             return newOutput;
         }
@@ -340,7 +340,7 @@ namespace LIME
                     subMatch.BuildTagedTree(newList);
                     var newOutput = new MinimalMatch(
                         subMatch.TextBegin, subMatch.TextEnd, 
-                        newList.ToArray(), capture.Tag);
+                        newList.ToArray(), capture.Tag, this);
                     currentList.Add(newOutput);
                 }
                 else
@@ -372,13 +372,26 @@ namespace LIME
             get { return SubMatches.Length; }
         }
 
-        public MinimalMatch(int begin , int end, MinimalMatch[] subMatches, string tag)
+        public string UniqID { get; private set; }
+        public Matcher Generator { get; private set; }
+        public MinimalMatch(int begin, int end, MinimalMatch[] subMatches, string tag, Match sorce)
         {
             Begin = begin;
             End = end;
             SubMatches = subMatches;
             Tag = tag;
+
+            UniqID = sorce.UniqID;
+            Generator = sorce.Generator;
         }
+
+        //public MinimalMatch(int begin , int end, MinimalMatch[] subMatches, string tag)
+        //{
+        //    Begin = begin;
+        //    End = end;
+        //    SubMatches = subMatches;
+        //    Tag = tag;
+        //}
 
         public MinimalMatch this[int i]
         {
@@ -685,7 +698,7 @@ namespace LIME
     /// </summary>
     public class PairMatch : LongOwnerMatch
     {
-        private Match _leftMatch;
+        private LeftMatch _leftMatch;
         private Match _rightMatch;
 
         public PairMatch(
@@ -695,8 +708,8 @@ namespace LIME
             //Debug.WriteLine($"*{UniqID} Pair ({leftInner.UniqID} {rightInner.UniqID})");
 
             Generator = generator;
-            _leftMatch = leftInner.Inner;
-            _rightMatch = rightInner.Inner;
+            _leftMatch = leftInner;
+            _rightMatch = rightInner;
 
             // Leftの配下に追加可能なLongMatchがある時は追加不可にする
             InnerDisable(executor, _leftMatch);
@@ -708,9 +721,9 @@ namespace LIME
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
 
-            //// 上がってきたマッチの参照カウントを増やす
-            //executor.ReferenceCountPlus(leftInner);
-            //executor.ReferenceCountPlus(rightInner);
+            // 上がってきたマッチの親カウントを増やす
+            executor.ParentsCountPlus(leftInner);
+            executor.ParentsCountPlus(rightInner);
 
             //Debug.WriteLine("**PairMatch Created**");
             //executor.ViewMatchTree(this);
@@ -817,11 +830,15 @@ namespace LIME
             Generator = generator;
             _inner = inner;
 
+            // innerの配下に追加可能なLongMatchがある時は
+            // Tagマッチ自体が追加可能となる
+            SetHasActiveTail(inner);
+
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
 
-            // 内包要素の参照カウントを増やす
-            executor.ReferenceCountPlus(inner);
+            // 内包要素の親カウントを増やす
+            executor.ParentsCountPlus(inner);
         }
         public Match Inner
         {
@@ -919,11 +936,15 @@ namespace LIME
             Generator = generator;
             _inner = inner;
 
+            // innerの配下に追加可能なLongMatchがある時は
+            // Tagマッチ自体が追加可能となる
+            SetHasActiveTail(inner);
+
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
 
-            // 内包要素の参照カウントを増やす
-            executor.ReferenceCountPlus(inner);
+            // 内包要素の親カウントを増やす
+            executor.ParentsCountPlus(inner);
         }
 
         public Match Inner
@@ -1021,8 +1042,8 @@ namespace LIME
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
 
-            // 内包要素の参照カウントを加算する
-            executor.ReferenceCountPlus(inner);
+            // 内包要素の親カウントを加算する
+            executor.ParentsCountPlus(inner);
         }
         public Match Inner
         {
@@ -1140,8 +1161,8 @@ namespace LIME
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
 
-            // 内包要素の参照カウントを増やす
-            executor.ReferenceCountPlus(inner);
+            // 内包要素の親カウントを増やす
+            executor.ParentsCountPlus(inner);
         }
 
         public void Add(Executor executor, Match inner)
@@ -1150,8 +1171,8 @@ namespace LIME
             InnerDisable(executor, _inners[_inners.Count - 1]);
 
             _inners.Add(inner);
-            // 内包要素の参照カウントを増やす
-            executor.ReferenceCountPlus(inner);
+            // 内包要素の親カウントを増やす
+            executor.ParentsCountPlus(inner);
 
             // 追加するinnerの配下に追加可能なLongMatchがある時は
             // 自分の HasActiveTail に反映する
@@ -1208,7 +1229,7 @@ namespace LIME
             return sb.ToString();
         }
 
-        private bool _isSelfActive = true;
+        // private bool _isSelfActive = true;
 
         public override bool HasActiveTail
         {
@@ -1339,8 +1360,8 @@ namespace LIME
 
             foreach (var inner in _inners)
             {
-                // 内包要素の参照カウントを加算する
-                executor.ReferenceCountPlus(inner);
+                // 内包要素の親カウントを加算する
+                executor.ParentsCountPlus(inner);
             }
         }
 
@@ -1455,8 +1476,8 @@ namespace LIME
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
 
-            // 先頭要素の参照カウントを加算する
-            executor.ReferenceCountPlus(firstMatch);
+            // 先頭要素の親カウントを加算する
+            executor.ParentsCountPlus(firstMatch);
         }
 
         /// <summary>
@@ -1497,8 +1518,8 @@ namespace LIME
 
             foreach (var inner in _inners)
             {
-                // 内包要素の参照カウントを加算する
-                executor.ReferenceCountPlus(inner);
+                // 内包要素の親カウントを加算する
+                executor.ParentsCountPlus(inner);
             }
         }
 
@@ -1610,7 +1631,7 @@ namespace LIME
         public CaptureMatch(Executor executor, Match inner, Matcher generator, string tag)
         {
             //Debug.WriteLine($"*{UniqID} Capture ({inner.UniqID})");
-
+            
             _inner = inner;
             Generator = generator;
             Tag = tag;
@@ -1622,8 +1643,8 @@ namespace LIME
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
 
-            // 内包要素の参照カウントを増やす
-            executor.ReferenceCountPlus(inner);
+            // 内包要素の親カウントを増やす
+            executor.ParentsCountPlus(inner);
         }
 
         public override IEnumerable<Match> SubMatches
@@ -1696,8 +1717,8 @@ namespace LIME
             // 自分自身を実行器に登録する。
             executor.RegisterMatch(this);
 
-            // 内包要素の参照カウントを増やす
-            executor.ReferenceCountPlus(inner);
+            // 内包要素の親カウントを増やす
+            executor.ParentsCountPlus(inner);
         }
 
         public override IEnumerable<Match> SubMatches

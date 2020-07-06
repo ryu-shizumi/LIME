@@ -1,9 +1,92 @@
-2020/06/22
-	Longマッチャーがゼロ回に対応してないので、
-	ゼロ回以上指定の際に長さゼロ文字列と論理和で結合するようにする。
+2020/06/27
+	
+	Longマッチャーの内包要素として複数の長さを取り得るマッチャーが存在すると、
+	Longマッチャーがマッチングを失敗する。
+	
+	改善策として、複数の長さを取り得るマッチャーは、
+	Longマッチャーの内包要素として指定できないようにする。
+	
+	長さ不定を型システムに取り込むのは無理？
+	("aa" | "bbb") は長さ不定になるが、長さ2と長さ3をそれぞれ別の型にしないといけなくなる。
+	引数型が同じで返信型の違うオーバーライドは不可能。
+	そもそも文字列リテラルとしての長さが違うからって、
+	入力補完が判別できる形でそれぞれの型を生成するのは無理。
+	
+	
+	
+	
+	複数の長さを取り得るマッチャーを内包要素とするマッチャーも、
+	複数の長さを取り得るマッチャーとなる。
+	
+	IMultiLength
+		Loop
+		
+		Either _01
+			ISingleLength と IZeroLength の論理和
 
-
-
+		Pair
+			IMultiLength との連結
+		
+		
+	ISingleLength
+		Long
+		NotableMatcher
+			Char
+			IZeroLength
+				
+				
+				
+				
+				
+				
+				
+		
+		Either
+			中身が全てSingleLength
+		Pair
+			中身が全てSingleLength
+	
+	SingleLength
+		長さゼロ
+			ZeroLength
+			Begin
+			End
+			WordBreak
+			Indent
+			Dedent
+			ErrorDedent
+		
+		長さ１以上
+			Char
+			Long
+	
+	MultiLength
+		Loop
+	
+	長さ不定(内容次第)
+		Capture
+		Either
+		EitherNotable
+		Pair
+		Left
+		Right
+		Recursion
+		Root
+	
+	
+	
+	
+	MultiLength nnn = MultiLength | SingleLength;
+	MultiLength nnn = MultiLength + SingleLength;
+	MultiLength nnn = SingleLength.Above0;
+	MultiLength nnn = MultiLength.Above0;
+	
+	SingleLength nnn = MultiLength | SingleLength;
+	SingleLength nnn = MultiLength + SingleLength;
+	SingleLength nnn = SingleLength.Above1;
+	
+	
+	
 
 キャプチャーの指定方法はブラケットで確定
 

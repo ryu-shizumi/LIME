@@ -153,14 +153,22 @@ namespace LIME
         {
             return new CharMatcher(min, max);
         }
+        public static Matcher _01(this char c)
+        {
+            return c._()._01();
+        }
 
-        public static LongMatcher AsLong(this char c)
+        public static LongMatcher Above1(this char c)
         {
             return c._().Above1;
         }
+        public static EitherMatcher Above0(this char c)
+        {
+            return c._().Above0;
+        }
     }
     #endregion
-    
+
     #region 文字型の拡張メソッド
     public static class CharEx
     {
@@ -1155,20 +1163,35 @@ namespace LIME
         /// <returns></returns>
         private IEnumerable<TokenRange> InsertZeroLength(IEnumerable<TokenRange> atoms)
         {
-            TokenRange prevToken = TokenRange.Invalid;
+            //TokenRange prevToken = TokenRange.Invalid;
+
+            var currentLastIndex = -1;
 
             foreach (var atomRange in atoms)
             {
-                var kind = atomRange.Kind;
-                var prevKind = prevToken.Kind;
-
-                if (prevKind == TokenKind._invalid_)
+                if (currentLastIndex == atomRange.End)
                 {
                     yield return atomRange;
-                    prevToken = atomRange;
-                    continue;
                 }
+                else
+                {
+                    currentLastIndex = atomRange.End;
+                    yield return atomRange;
+                    yield return new TokenRange
+                        (TokenKind.ZeroLength, atomRange.End, atomRange.End);
+                }
+
+                //var kind = atomRange.Kind;
+                //var prevKind = prevToken.Kind;
+
+                //if (prevKind == TokenKind._invalid_)
+                //{
+                //    yield return atomRange;
+                //    prevToken = atomRange;
+                //    continue;
+                //}
                 // 長さゼロトークンを差し込まなければならない場合とは？
+                // 開始の後
                 // 単語開始の後
                 // 単語終了の前
                 // 文字と文字の間
@@ -1177,26 +1200,26 @@ namespace LIME
                 // 文字と空白の間
                 // 文字と改行の間
 
-                switch (kind)
-                {
-                case TokenKind.OneChar:
-                case TokenKind.WordChar:
-                    yield return new TokenRange
-                        (TokenKind.ZeroLength, atomRange.Begin, atomRange.Begin);
-                    break;
-                case TokenKind.WordEnd:
-                case TokenKind.SpaceArray:
-                case TokenKind.End:
-                    if( (prevKind == TokenKind.OneChar) ||
-                        (prevKind == TokenKind.WordChar))
-                    {
-                        yield return new TokenRange
-                            (TokenKind.ZeroLength, atomRange.Begin, atomRange.Begin);
-                    }
-                    break;
-                }
-                yield return atomRange;
-                prevToken = atomRange;
+                //switch (kind)
+                //{
+                //case TokenKind.OneChar:
+                //case TokenKind.WordChar:
+                //    yield return new TokenRange
+                //        (TokenKind.ZeroLength, atomRange.Begin, atomRange.Begin);
+                //    break;
+                //case TokenKind.WordEnd:
+                //case TokenKind.SpaceArray:
+                //case TokenKind.End:
+                //    if( (prevKind == TokenKind.OneChar) ||
+                //        (prevKind == TokenKind.WordChar))
+                //    {
+                //        yield return new TokenRange
+                //            (TokenKind.ZeroLength, atomRange.Begin, atomRange.Begin);
+                //    }
+                //    break;
+                //}
+                //yield return atomRange;
+                //prevToken = atomRange;
             }
         }
         public enum TokenKind

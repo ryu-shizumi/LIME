@@ -10,8 +10,8 @@ namespace Test
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
             LIME.TestClass.Test();
+            Console.WriteLine("Hello World!");
 
             //var match = ('a'._() + 'b').Search("abc");
 

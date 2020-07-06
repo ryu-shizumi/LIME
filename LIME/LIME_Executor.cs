@@ -709,46 +709,46 @@ namespace LIME
 
         #region Matchのインスタンス管理
 
-        /// <summary>参照カウントの最低値</summary>
-        private static int ReferenceCountBottom = 0;
+        /// <summary>親カウントの最低値</summary>
+        private static int ParentsCountBottom = 0;
 
-        /// <summary>参照カウント</summary>
-        private Dictionary<Match, int> _referenceCount
+        /// <summary>親カウント</summary>
+        private Dictionary<Match, int> _parentsCount
             = new Dictionary<Match, int>();
 
         /// <summary>
-        /// マッチの参照カウントをプラスする
+        /// マッチの親カウントをプラスする
         /// </summary>
         /// <param name="match">マッチ</param>
-        public void ReferenceCountPlus(Match match)
+        public void ParentsCountPlus(Match match)
         {
-            if (_referenceCount.ContainsKey(match) == false)
+            if (_parentsCount.ContainsKey(match) == false)
             {
-                _referenceCount.Add(match, ReferenceCountBottom);
+                _parentsCount.Add(match, ParentsCountBottom);
             }
             else
             {
-                _referenceCount[match] += 1;
+                _parentsCount[match] += 1;
             }
         }
 
         /// <summary>
-        /// マッチの参照カウントをマイナスする。
-        /// 参照カウントがゼロになったマッチは完全に削除され、
+        /// マッチの親カウントをマイナスする。
+        /// 親カウントがゼロになったマッチは完全に削除され、
         /// 同一の開始インデックス
         /// </summary>
         /// <param name="match">マッチ</param>
-        public void ReferenceCountMinus(Match match)
+        public void ParentsCountMinus(Match match)
         {
-            if(_referenceCount[match]<= (ReferenceCountBottom+1))
+            if (_parentsCount[match] == ParentsCountBottom)
             {
                 foreach (var subMatch in match.SubMatches)
                 {
-                    // サブマッチも参照カウントを減らす
+                    // サブマッチも親カウントを減らす
                     subMatch.UnWrap(this);
                 }
-                // 参照カウントリストからマッチを削除する。
-                _referenceCount.Remove(match);
+                // 親カウントリストからマッチを削除する。
+                _parentsCount.Remove(match);
 
                 // 開始インデックスを取得する
                 int index = match.TextBegin;
@@ -783,7 +783,7 @@ namespace LIME
                             {
                                 foreach (var subMatch in item.SubMatches)
                                 {
-                                    // サブマッチも参照カウントを減らす
+                                    // サブマッチも親カウントを減らす
                                     subMatch.UnWrap(this);
                                 }
                             }
@@ -793,30 +793,32 @@ namespace LIME
             }
             else
             {
-                _referenceCount[match]--;
+                //int refCount = _parentsCount[match];
+                //Debug.WriteLine($"{match.UniqID} {refCount} -> {refCount - 1}");
+                _parentsCount[match]--;
             }
 
         }
 
-        public int ReferenceCount(Match match)
+        public int GetParentsCount(Match match)
         {
-            if(_referenceCount.ContainsKey(match) == false)
+            if(_parentsCount.ContainsKey(match) == false)
             {
                 return -999;
             }
-            return _referenceCount[match];
+            return _parentsCount[match];
         }
 
         public void ViewMatchTree(Match match, string indent = "")
         {
             int refCount;
-            if (_referenceCount.ContainsKey(match) == false)
+            if (_parentsCount.ContainsKey(match) == false)
             {
                 refCount = -999;
             }
             else
             {
-                refCount = _referenceCount[match];
+                refCount = _parentsCount[match];
             }
 
             var typeName = match.GetType().Name;
@@ -877,8 +879,8 @@ namespace LIME
             }
             _endList[match.TextEnd].Add(match);
 
-            // マッチの参照カウントを１にする
-            ReferenceCountPlus(match);
+            // マッチの親カウントを１にする
+            ParentsCountPlus(match);
         }
 
 
@@ -907,18 +909,18 @@ namespace LIME
 
         private string TreeTextOld = "";
         private string TreeTextNow = "";
-        private void DebugWriteMatchTree(int index = -1)
+        private void DebugWriteMatcherTree(int index = -1)
         {
-            //if (index != -1)
-            //{
-            //    Debug.WriteLine($"index = {index}");
-            //}
-            //TreeTextNow = _root.ToTreeText(this);
-            //if (TreeTextOld != TreeTextNow)
-            //{
-            //    Debug.WriteLine(TreeTextNow);
-            //    TreeTextOld = TreeTextNow;
-            //}
+            if (index != -1)
+            {
+                Debug.WriteLine($"index = {index}");
+            }
+            TreeTextNow = _root.ToTreeText(this);
+            if (TreeTextOld != TreeTextNow)
+            {
+                Debug.WriteLine(TreeTextNow);
+                TreeTextOld = TreeTextNow;
+            }
         }
 
         /// <summary>
@@ -959,11 +961,32 @@ namespace LIME
 
             _blankList = new SortedList<int, TextRange>();
 
-            
+            //var tokens = new List<TokenStream.TokenRange>(new TokenStream(_text));
+
+            //foreach(var item in tokens)
+            //{
+            //    switch(item.Kind)
+            //    {
+            //    case TokenStream.TokenKind.WordChar:
+            //    case TokenStream.TokenKind.OneChar:
+            //        Debug.WriteLine($"[{item.Begin}-{item.End}]{item.Kind} {_text[item.Begin]}");
+                    
+            //        break;
+            //    default:
+            //        Debug.WriteLine($"[{item.Begin}-{item.End}]{item.Kind}");
+            //        break;
+            //    }
+            //}
+
+
+
             foreach (var token in new TokenStream(_text))
+            //for(int tokenIndex = 0; tokenIndex < tokens.Count; tokenIndex++)
             {
+                //var token = tokens[tokenIndex];
+            
                 index = token.Begin;
-                DebugWriteMatchTree(index);
+                //DebugWriteMatcherTree(index);
 
                 // このインデックスから開始するマッチを保存するリストを作成する。
                 // (削除用)
@@ -1140,6 +1163,7 @@ namespace LIME
                     break;
                 }
 
+                //DebugWriteMatcherTree();
 
                 // 全ての走行待ちマッチを全て走らせる。
                 RunAllMatch();
@@ -1191,7 +1215,7 @@ namespace LIME
             // 未走行マッチが無くなるまで繰り返す
             while (_running_MatchToPos.Count > 0)
             {
-                DebugWriteMatchTree();
+                //DebugWriteMatcherTree();
 
                 int currentLength = int.MaxValue;
 
@@ -1302,7 +1326,7 @@ namespace LIME
         /// <param name="runningMatch"></param>
         void RunMatch(Matcher currentPos, Match runningMatch)
         {
-            DebugWriteMatchTree();
+            //DebugWriteMatcherTree();
 
             // 元のマッチの長さを保持しておく
             int currentLength = runningMatch.TextLength;

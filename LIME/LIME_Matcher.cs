@@ -126,6 +126,17 @@ namespace LIME
             _uniqNumber = 0;
         }
 
+        public string TypeName
+        {
+            get
+            {
+                var type = this.GetType();
+                var typeName = type.Name.Replace(type.Namespace, "")
+                    .Replace("Matcher","");
+                return typeName;
+            }
+        }
+
 #if DEBUG
         public string ToTreeText()
         {
@@ -195,7 +206,7 @@ namespace LIME
                 }
             }
 
-            var name = this.GetType().Name.Replace("Matcher", "");
+            var name = this.TypeName;
             var uniqID = "";
             if (this.IsOriginal)
             {
@@ -541,6 +552,14 @@ namespace LIME
         #endregion
 
         #region 回数指定
+        /// <summary>
+        /// 0回または1回にマッチするマッチャーに変換する。
+        /// </summary>
+        /// <returns></returns>
+        public Matcher _01()
+        {
+            return (this | "");
+        }
 
         /// <summary>
         /// 回数を指定した繰り返しを設定する。デリミタを挟み込む事もできる。
@@ -600,15 +619,6 @@ namespace LIME
         public Matcher Times(int count, Matcher delimiter = null)
         {
             return this.Times(count, count, delimiter);
-        }
-
-        /// <summary>
-        /// 0回または1回にマッチするマッチャーに変換する。
-        /// </summary>
-        /// <returns></returns>
-        public Matcher _01()
-        {
-            return (this | "");
         }
 
         /// <summary>
@@ -685,7 +695,7 @@ namespace LIME
 
         #endregion 回数指定
 
-        
+
 
         #region 検索処理
         /// <summary>
@@ -1971,6 +1981,19 @@ namespace LIME
 
         public override Match[] ReceiveMatch(Executor executor, Match innerMatch)
         {
+            if(innerMatch is CaptureMatch cap)
+            {
+                if( (cap.Tag == "rule") && (innerMatch.TextLength == 10))
+                {
+                    Debug.WriteLine($"c = {innerMatch.ToString(executor.Text)}");
+                }
+            }
+
+            if (innerMatch.ToString(executor.Text) == "a")
+            {
+                var temp = "";
+            }
+
             var stayMatches = executor.Staying_PosToMatch(this.Original);
 
             var result = new List<Match>();

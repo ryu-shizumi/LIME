@@ -16,147 +16,117 @@ namespace LIME
         public static void Test()
         {
 
-
-
-            TestBody("「Test01」", true, "A", Begin + 'A' + End);
-
-            TestBody("「Test02」", true, "ABC", 'A'._() + 'B' + 'C');
-
-            TestBody("「Test03」", true, "ABC", ('A'._() | 'B') + 'B' + 'C');
-
-            TestBody("「Test04」", true, "ABC", 'A'._().Times(1) + 'B' + 'C');
-
-            TestBody("「Test05」", true, "ABC", ('A'._() | 'B').Times(1) + 'B' + 'C');
-
-            TestBody("「Test06」", true, "ABC", ('A'._() | 'B').Times(2) + 'C');
-
-            TestBody("「Test01_2」", true, "AA", 'A'._().Times(2));
-
-            TestBody("「Test01_3」", true, "AAA", 'A'._().Times(3));
-
-            TestBody("「Test01_4」", true, "AAAA", 'A'._().Times(4));
-
-            TestBody("「Test06_2」", true, "ABC", ('A'._() | 'B' | 'C').Times(3));
-
             var Alphabet = 'a'.To('z') | 'A'.To('Z');
             var Alphabets = Alphabet.Above1;
-
-            TestBody("「Test07_0」", true, "ABC", Alphabet.Times(3));
-
-            TestBody("「Test07」", true, "ABC", Begin + Alphabet.Times(3) + End);
-
-            TestBody("「Test08」", true,
-                "ABC", Begin + Alphabet + ("" + Alphabet).Times(2) + End);
-
-            TestBody("「Test09」", true, "ABC", Begin + Alphabet.Times(3, ""._()) + End);
-
-            TestBody("「繰り返し(デリミタ長さゼロ)」", false, "abc1", Begin + Alphabet.Times(3, ""._()) + End);
 
             var number = '0'.To('9');
             var numbers = number.Above1["整数"];
 
-            TestBody("「Test10」", true, "0", numbers);
 
-            TestBody("「Test11」", true, "01", numbers);
+            //TestBody("「Test01」", true, "A", Begin + 'A' + End);
 
+            //TestBody("「Test02」", true, "ABC", 'A'._() + 'B' + 'C');
 
-            TestBody("「Test12」", true, "012", numbers);
-
-            Matcher matcherExe01 = numbers + "+";
-
-            TestBody("「Test13」", true, "01+", numbers + "+");
-
-            TestBody("「Test13_2」", true, "+01", "+" + numbers);
-
-            TestBody("「Test14 ２項演算」", true, "0+2", numbers + "+" + numbers);
-
-            TestBody("「Test15 ２項演算」", true, "0+2", numbers + "+" + number);
-
-            TestBody("「Test15_2 ２項演算」", true, "0+2", number + "+" + numbers);
-
-            TestBody("「Test16 ２項演算」", true, "01+23", numbers + '+' + numbers);
-
-            TestBody("「Test16_2 ２項演算」", true, "01 + 23", numbers + '+' + numbers);
-
-            TestBody("「Test17 ２項演算の連続」", true, "01+23+45", numbers + '+' + numbers + '+' + numbers);
-
-            TestBody("「Test17_2 ２項演算の連続」", true, "01 + 23 + 45", numbers + '+' + numbers + '+' + numbers);
-
-            RecursionMatcher exp = new RecursionMatcher();
-
-            exp.Inner =
-                ((exp | numbers) + '+'._()["演算子"] + numbers["整数"])["式"];
-            TestBody("「Test18 循環定義(左結合演算)」", true, "01 + 23 + 45     + 67", exp);
-
-            exp.Inner =
-                ((exp | numbers) + '+'._() + numbers);
-            TestBody("「Test18_2 循環定義(左結合演算)」", true, "01+23+45+67", exp);
-
-            exp.Inner =
-                (numbers["整数"] + '='._()["演算子"] + (exp | numbers["整数"]))["式"];
-            TestBody("「Test19 循環定義(右結合演算)」", true, "01=23=45=67", exp);
-
-            exp.Inner =
-                (numbers + '=' + (exp | numbers));
-            TestBody("「Test19_2 循環定義(右結合演算)」", true, "01=23=45=67", exp);
+            //TestBody("「Test03」", true, "ABC", ('A'._() | 'B') + 'B' + 'C');
 
 
-            // 「除算」のマッチャーを作る。(但し中身は空っぽ)
-            RecursionMatcher DivExp = new RecursionMatcher();
+            //TestBody("「Test10」", true, "0", numbers);
 
-            // 「除算」の中身を設定する。
-            DivExp.Inner =
-                ((numbers | DivExp)["左辺"] +
-                '/' +
-                numbers["右辺"])["除算式"];
+            //TestBody("「Test11」", true, "01", numbers);
 
-            // 「減算」のマッチャーを作る。(但し中身は空っぽ)
-            RecursionMatcher SubExp = new RecursionMatcher();
+            //TestBody("「Test12」", true, "012", numbers);
 
-            // 「減算」の中身を設定する。
-            SubExp.Inner =
-                ((numbers | DivExp | SubExp)["左辺"] +
-                '-' +
-                (numbers | DivExp)["右辺"])["減算式"];
-            TestBody("「Test20 循環定義(左結合演算)」", true, "01-23/45-67-89", SubExp);
+            //TestBody("「Test13」", true, "01+", numbers + "+");
 
-            // 「左シフト演算」のマッチャーを作る。(但し中身は空っぽ)
-            RecursionMatcher LShiftExp = new RecursionMatcher();
+            //TestBody("「Test13_2」", true, "+01", "+" + numbers);
 
-            // 「左シフト演算」の中身を設定する。
-            LShiftExp.Inner =
-                ((numbers | DivExp | SubExp | LShiftExp)["左辺"] +
-                "<<" +
-                (numbers | DivExp | SubExp)["右辺"])["左シフト式"];
-            TestBody("「Test21 循環定義(左結合演算)」", true, "012<<345/678-901-234", LShiftExp);
+            //TestBody("「Test14 ２項演算」", true, "0+2", numbers + "+" + numbers);
+
+            //TestBody("「Test15 ２項演算」", true, "0+2", numbers + "+" + number);
+
+            //TestBody("「Test15_2 ２項演算」", true, "0+2", number + "+" + numbers);
+
+            //TestBody("「Test16 ２項演算」", true, "01+23", numbers + '+' + numbers);
+
+            //TestBody("「Test16_2 ２項演算」", true, "01 + 23", numbers + '+' + numbers);
+
+            //TestBody("「Test17 ２項演算の連続」", true, "01+23+45", numbers + '+' + numbers + '+' + numbers);
+
+            //TestBody("「Test17_2 ２項演算の連続」", true, "01 + 23 + 45", numbers + '+' + numbers + '+' + numbers);
+
+            //RecursionMatcher exp = new RecursionMatcher();
+
+            //exp.Inner =
+            //    ((exp | numbers) + '+'._()["演算子"] + numbers["整数"])["式"];
+            //TestBody("「Test18 循環定義(左結合演算)」", true, "01 + 23 + 45     + 67", exp);
+
+            //exp.Inner =
+            //    ((exp | numbers) + '+'._() + numbers);
+            //TestBody("「Test18_2 循環定義(左結合演算)」", true, "01+23+45+67", exp);
+
+            //exp.Inner =
+            //    (numbers["整数"] + '='._()["演算子"] + (exp | numbers["整数"]))["式"];
+            //TestBody("「Test19 循環定義(右結合演算)」", true, "01=23=45=67", exp);
+
+            //exp.Inner =
+            //    (numbers + '=' + (exp | numbers));
+            //TestBody("「Test19_2 循環定義(右結合演算)」", true, "01=23=45=67", exp);
 
 
-            var Cr = '\r'._();
-            var Lf = '\n'._();
+            //// 「除算」のマッチャーを作る。(但し中身は空っぽ)
+            //RecursionMatcher DivExp = new RecursionMatcher();
 
-            // 文字列リテラル(C言語形式)
-            var StringLiteral = '"'._() +
-                (('\\' + (Cr | Lf).Not) | (Cr | Lf | '\\' | '"').Not).Above0["文字列中身"] +
-                '"';
-            Debug.WriteLine(StringLiteral.ToString());
-            Debug.WriteLine(StringLiteral.ToTreeText());
+            //// 「除算」の中身を設定する。
+            //DivExp.Inner =
+            //    ((numbers | DivExp)["左辺"] +
+            //    '/' +
+            //    numbers["右辺"])["除算式"];
+
+            //// 「減算」のマッチャーを作る。(但し中身は空っぽ)
+            //RecursionMatcher SubExp = new RecursionMatcher();
+
+            //// 「減算」の中身を設定する。
+            //SubExp.Inner =
+            //    ((numbers | DivExp | SubExp)["左辺"] +
+            //    '-' +
+            //    (numbers | DivExp)["右辺"])["減算式"];
+            //TestBody("「Test20 循環定義(左結合演算)」", true, "01-23/45-67-89", SubExp);
+
+            //// 「左シフト演算」のマッチャーを作る。(但し中身は空っぽ)
+            //RecursionMatcher LShiftExp = new RecursionMatcher();
+
+            //// 「左シフト演算」の中身を設定する。
+            //LShiftExp.Inner =
+            //    ((numbers | DivExp | SubExp | LShiftExp)["左辺"] +
+            //    "<<" +
+            //    (numbers | DivExp | SubExp)["右辺"])["左シフト式"];
+            //TestBody("「Test21 循環定義(左結合演算)」", true, "012<<345/678-901-234", LShiftExp);
 
 
-            TestBody("「Test22 文字列リテラル」", true, "ab\"c\"89", StringLiteral);
-            TestBody("「Test23 文字列リテラル」", true, "z\"a\"ee", StringLiteral);
-            TestBody("「Test24 文字列リテラル」", true, "z\"ab\"ee", StringLiteral);
-            TestBody("「Test25 文字列リテラル」", true, "z\"01-23\"ee", StringLiteral);
-            TestBody("「Test26 文字列リテラル」", true, "z\"01-23/45\"ee", StringLiteral);
-            TestBody("「Test27 文字列リテラル」", true, "z\"01-23/4578\"ee", StringLiteral);
-            TestBody("「Test28 文字列リテラル」", true, "z\"\\\"d\"ee", StringLiteral);
-            TestBody("「Test29 文字列リテラル」", true, "z\"a\"ee", StringLiteral);
-            TestBody("「Test30 文字列リテラル」", true, "z\"\"ee", StringLiteral);
-            TestBody("「Test30_2 文字列リテラル」", true, "z\"  \"ee", StringLiteral);
-            TestBody("「Test30_3 文字列リテラル」", true, "z  \"  \"  ee", StringLiteral);
+            //var Cr = '\r'._();
+            //var Lf = '\n'._();
 
-            var testPattern = '"' + '"'._().Not.Above1["TextBody"] + '"';
+            //// 文字列リテラル(C言語形式)
+            //var StringLiteral = '"'._() +
+            //    (('\\' + (Cr | Lf).Not) | (Cr | Lf | '\\' | '"').Not).Above0["文字列中身"] +
+            //    '"';
 
-            TestBody("「Test31 文字列リテラル」", true, "a\"01234567890\"", testPattern);
+
+            //TestBody("「Test22 文字列リテラル」", true, "ab\"c\"89", StringLiteral);
+            //TestBody("「Test23 文字列リテラル」", true, "z\"a\"ee", StringLiteral);
+            //TestBody("「Test24 文字列リテラル」", true, "z\"ab\"ee", StringLiteral);
+            //TestBody("「Test25 文字列リテラル」", true, "z\"01-23\"ee", StringLiteral);
+            //TestBody("「Test26 文字列リテラル」", true, "z\"01-23/45\"ee", StringLiteral);
+            //TestBody("「Test27 文字列リテラル」", true, "z\"01-23/4578\"ee", StringLiteral);
+            //TestBody("「Test28 文字列リテラル」", true, "z\"\\\"d\"ee", StringLiteral);
+            //TestBody("「Test29 文字列リテラル」", true, "z\"a\"ee", StringLiteral);
+            //TestBody("「Test30 文字列リテラル」", true, "z\"\"ee", StringLiteral);
+            //TestBody("「Test30_2 文字列リテラル」", true, "z\"  \"ee", StringLiteral);
+            //TestBody("「Test30_3 文字列リテラル」", true, "z  \"  \"  ee", StringLiteral);
+
+            //var testPattern = '"' + '"'._().Not.Above1["TextBody"] + '"';
+
+            //TestBody("「Test31 文字列リテラル」", true, "a\"01234567890\"", testPattern);
 
             //var c = numbers["数値"];
             //var intLiteral = '1'.To('9') + numbers;
@@ -170,91 +140,157 @@ namespace LIME
 
             //var cr = "\r";
             //var lf = "\n";
-            //var crlf = cr + lf;
-            ////var testText =
-            ////    "block" + crlf +
-            ////    "  012345" + crlf +
-            ////    "  nnnnnn" + crlf +
-            ////    "pppppp";
+            //var CrLf = Cr + Lf;
             //var testText =
-            //    "block" + lf + cr +
+            //    "block" + crlf +
             //    "  012345" + crlf +
-            //    "    nnnnnn" + crlf +
-            //    " block" + lf + cr +
-            //    "  012345" + crlf +
-            //    "   nnnnnn" + crlf +
+            //    "  nnnnnn" + crlf +
             //    "pppppp";
+            //var testText =
+            //    "block" + Lf + Cr +
+            //    "  012345" + CrLf +
+            //    "    nnnnnn" + CrLf +
+            //    " block" + Lf + Cr +
+            //    "  012345" + CrLf +
+            //    "   nnnnnn" + CrLf +
+            //    "pppppp";
+
+            //TestBNF();
 
             //var bnf = "stringliteral   ::=  [stringprefix](shortstring | longstring);";
 
-            //TestBody("「Test31_1 BNF」", true, "s::=a;", GetBNF());
+            //TestBody("「Test31_1 BNF」", true, "s::=a;", Alphabets + "::=" + Alphabets + ";");
+            TestBody("「Test31_1 BNF」", true, "s::=a;", GetBNF());
             //TestBody("「Test31_2 BNF」", true, "s ::= a ;", GetBNF());
             //TestBody("「Test31_3 BNF」", true, "s ::= [a] ;", GetBNF());
             //TestBody("「Test31_4 BNF」", true, "s ::= (a) ;", GetBNF());
             //TestBody("「Test31_5 BNF」", true, "s ::= b|c ;", GetBNF());
-            //TestBody("「Test31_6 BNF」", true, "s ::= (b|c) ;", GetBNF());
+            //TestBody("「Tst31_6 BNF」", true, "s ::= (b|c) ;", GetBNF());
             //TestBody("「Test31_7 BNF」", true, "s ::= [a](b|c) ;", GetBNF());
 
-            //TokenStream tokenStream = new TokenStream(testText);
+            
+        }
 
-            //foreach (var token in tokenStream)
-            //{
-            //    Debug.WriteLine(token);
-            //}
+        private static void TestBNF()
+        {
+            //TestNakedBNF();
+            TestEnclosedBNF();
+        }
 
-            //var newLine = Cr + Lf;
-            //var spaces = " "._()._0Max();
-            //var statement = spaces + LineChar._1Max() + newLine;
+        private static void TestNakedBNF()
+        {
+            var Cr = '\r'._();
+            var Lf = '\n'._();
 
-            //var blockRule =
-            //    "block" + Cr + Lf +
-            //    spaces + Indent + statement._1Max() +
-            //    Dedent;
+            // 囲われたリテラル
+            var EnclosedLiteral =
+                '#' + '#'._().Not.Above1["literal"] + '#' | // Algol-60 形式
+                '"' + '"'._().Not.Above1["literal"] + '"' |
+                '\'' + '\''._().Not.Above1["literal"] + '\'';
 
+            // 生リテラル
+            var NakedLiteral = (' ' | Cr | Lf).Not.Above1["literal"];
 
+            var Alphabet = ('A'.To('Z') | 'a'.To('z'))["alpahbet"];
+            var Numeric = '0'.To('9');
 
-            //var parenExp = new RecursionMatcher();
+            // 裸の識別子
+            var NakedID = ((Alphabet | '_')["HeadChar"] +
+                (Alphabet | '_' | Numeric).Above0["NextChar"])["NakedID"];
 
-            //var ID = (Alphabet | number)._1Max()["identifier"] |
-            //    '<' + (Alphabet | number | ' ' | '-')._1Max()["identifier"] + '>';
-
-
-
-            //parenExp.Inner =
-            //    ('(' + parenExp["group_exp"] + ')')["group"] |
-            //    ('[' + parenExp["option_exp"] + ']')["option"] |
-            //    (parenExp["or_left"] + '|' + parenExp["or_right"])["or"] |
-            //    (parenExp["connect_left"] + parenExp["connect_right"])["connect"] |
-            //    (parenExp["above1_exp"] + '+')["above1"] |
-            //    (parenExp["above0_exp"] + '*')["above0"] |
-
-            //    ID |
-
-            //    '#' + '#'._().Not._0Max()["literal"] + '#' | // Algol-60 形式
-            //    '"' + '"'._().Not._0Max()["literal"] + '"' |
-            //    '\'' + '\''._().Not._0Max()["literal"] + '\''
-            //    ;
-
-            //var Rule = (ID["rule_name"] + "::=" + parenExp["rule_exp"] + ';'._()._01())["rule"];
-
-
-            //TestBody("「Test40 BNF」", true, "((a|b))", parenExp);
-            //TestBody("「Test41 BNF」", true, "([a|b])", parenExp);
-            //TestBody("「Test42 BNF」", true, "([a b])", parenExp);
-            //TestBody("「Test43 BNF」", true, "([a* b])", parenExp);
-            //TestBody("「Test44 BNF」", true, "([a+ b])", parenExp);
-            //TestBody("「Test45 BNF」", true, "([a+ b])+", parenExp);
-            //TestBody("「Test46 BNF」", true, "([<a b c>+ b])+", parenExp);
-            //TestBody("「Test47 BNF」", true, "([aa+ b])+", parenExp);
-
-            //TestBody("「Test48 BNF」", true, "s::=[a](b|c)", Alphabet + "::=" + parenExp);
+            // 裸の識別子を使う式
+            var NExp = new RecursionMatcher();
+            // どちらか・どれか
+            var NOr = (NExp["or_left"] + '|' + NExp["or_right"])["or"];
+            // ０回か１回
+            var NOption = ('[' + NExp["option_exp"] + ']')["option"];
+            // ０回以上
+            var NAbove0 = (NExp["above0_exp"] + '*')["above0"];
+            // １回以上
+            var NAbove1 = (NExp["above1_exp"] + '+')["above1"];
+            // グループ化
+            var NGroup = ('(' + NExp["group_exp"] + ')')["group"];
 
 
-            //TestBody("「Test49 BNF」", true, "s::=[a](b|c)", ID + "::=" + parenExp + ';'._()._01());
-            //TestBody("「Test50 BNF」", true, "s::=[a](b|c)", Rule);
-            //TestBody("「Test51 BNF」", true, "ss::=[aa](bb|cc)", Rule);
+            // 連結
+            var NConnect = (NExp + NExp)["NConnect"];
 
-            //TestBody("「Test47 BNF」", true, "stringliteral::=[stringprefix](shortstring|longstring)", Rule);
+            NExp.Inner = (NakedID
+                 | EnclosedLiteral
+                 | NOr
+                 | NOption
+                 | NAbove0
+                 | NAbove1
+                 | NGroup
+                 | NConnect
+                );
+
+            // 裸の識別子で定義されたBNF
+            var NRule = (NakedID["rule_name"] +
+                "::=" + NExp["rule_exp"]
+                + ';'._01()["colon"]
+                )["rule"];
+            // 裸の識別子で定義されたBNF
+            var NakedBNF = Begin + NRule.Above1 + End;
+
+
+            TestBody("「BNF_Test1」", true, "s::=a;", NakedBNF);
+            //TestBody("「BNF_Test3」", true, "ssss", NRule);
+            //TestBody("「BNF_Test1」", true, "s::=a;", GetBNF());
+            //TestBody("「BNF_Test1」", true, "s::=a;", GetBNF());
+            //TestBody("「BNF_Test1」", true, "s::=a;", GetBNF());
+            //TestBody("「BNF_Test1」", true, "s::=a;", GetBNF());
+
+        }
+        private static void TestEnclosedBNF()
+        {
+            // <aaa> のように囲われた識別子
+            var EnclosedID = ('<' + ('<'._() | '>'|':'|'=').Not.Above1["E_identifier_inner"] + '>')
+                ["E_identifier"];
+            var Cr = '\r'._();
+            var Lf = '\n'._();
+
+            // 囲われたリテラル
+            var EnclosedLiteral =
+                '#' + '#'._().Not.Above1["E_literal"] + '#' | // Algol-60 形式
+                '"' + '"'._().Not.Above1["E_literal"] + '"' |
+                '\'' + '\''._().Not.Above1["E_literal"] + '\'';
+
+            // 生リテラル
+            var NakedLiteral = ('<'._() | '>' | ':' | '=' | ' ' | Cr | Lf).Not["N_literal_Char"].Above1["N_literal"];
+
+            // 囲われた識別子を使う式
+            var EExp = new RecursionMatcher();
+
+            // どちらか・どれか
+            var EOr = (EExp["or_left"] + '|' + EExp["or_right"])["or"];
+            // ０回か１回
+            var EOption = ('[' + EExp["option_exp"] + ']')["option"];
+            // ０回以上
+            var EAbove0 = (EExp["above0_exp"] + '*')["above0"];
+            // １回以上
+            var EAbove1 = (EExp["above1_exp"] + '+')["above1"];
+            // グループ化
+            var EGroup = ('(' + EExp["group_exp"] + ')')["group"];
+            // 連結
+            var EConnect = EExp + EExp;
+
+            EExp.Inner = EnclosedID | EnclosedLiteral | NakedLiteral |
+                EOr | EOption | EAbove0 | EAbove1 | EGroup | EConnect;
+            // 規則
+            var ERule = (EnclosedID["rule_name"] +
+                "::=" + EExp["rule_exp"] + ';'._01())["rule"];
+
+            // 囲われた識別子で定義されたBNF
+            var EnclosedBNF = Begin + ERule._1Max() + End;
+
+            TestBody("「BNF_Test2」", true, "<s>::=<a>;", EnclosedBNF);
+            //TestBody("「BNF_Test3」", true, "ssss", NRule);
+            //TestBody("「BNF_Test1」", true, "s::=a;", GetBNF());
+            //TestBody("「BNF_Test1」", true, "s::=a;", GetBNF());
+            //TestBody("「BNF_Test1」", true, "s::=a;", GetBNF());
+            //TestBody("「BNF_Test1」", true, "s::=a;", GetBNF());
+
         }
 
 
@@ -285,34 +321,40 @@ namespace LIME
         {
 
             // <aaa> のように囲われた識別子
-            var EnclosedID = '<' + '>'._().Not._1Max()["identifier"] + '>';
+            var EnclosedID = '<' + ('<'._() | '>' | ':' | '=').Not.Above1["identifier"] + '>';
             var Cr = '\r'._();
             var Lf = '\n'._();
 
-            var Blank = Cr | Lf | " " | "\t";
-
             // 囲われたリテラル
             var EnclosedLiteral =
-                '#' + '#'._().Not._0Max()["literal"] + '#' | // Algol-60 形式
-                '"' + '"'._().Not._0Max()["literal"] + '"' |
-                '\'' + '\''._().Not._0Max()["literal"] + '\'';
+                '#' + '#'._().Not.Above1["literal"] + '#' | // Algol-60 形式
+                '"' + '"'._().Not.Above1["literal"] + '"' |
+                '\'' + '\''._().Not.Above1["literal"] + '\'';
 
             // 生リテラル
-            var NakedLiteral = (' ' | Cr | Lf).Not._1Max(); ;
+            var NakedLiteral = (' ' | Cr | Lf).Not.Above1["literal"];
 
             // 囲われた識別子を使う式
             var EExp = new RecursionMatcher();
 
+            // どちらか・どれか
             var EOr = (EExp["or_left"] + '|' + EExp["or_right"])["or"];
+            // ０回か１回
             var EOption = ('[' + EExp["option_exp"] + ']')["option"];
+            // ０回以上
             var EAbove0 = (EExp["above0_exp"] + '*')["above0"];
+            // １回以上
             var EAbove1 = (EExp["above1_exp"] + '+')["above1"];
+            // グループ化
             var EGroup = ('(' + EExp["group_exp"] + ')')["group"];
+            // 連結
             var EConnect = EExp + EExp;
 
             EExp.Inner = EnclosedID | EnclosedLiteral | NakedLiteral | 
                 EOr | EOption | EAbove0 | EAbove1 | EGroup | EConnect;
-            var ERule = (EnclosedID["rule_name"] + "::=" + EExp["rule_exp"] + ';'._()._01())["rule"];
+            // 規則
+            var ERule = (EnclosedID["rule_name"] + 
+                "::=" + EExp["rule_exp"] + ';'._01())["rule"];
 
             // 囲われた識別子で定義されたBNF
             var EnclosedBNF = Begin + ERule._1Max() + End;
@@ -322,34 +364,32 @@ namespace LIME
             var Numeric = '0'.To('9');
 
             // 裸の識別子
-            var NakedID = ((Alphabet | '_') + (Alphabet | '_' | Numeric)._0Max())["identifier"];
+            var NakedID = ((Alphabet | '_') + 
+                (Alphabet | '_' | Numeric).Above0)["identifier"];
 
             // 裸の識別子を使う式
             var NExp = new RecursionMatcher();
-
+            // どちらか・どれか
+            var NOr = (NExp["or_left"] + '|' + NExp["or_right"])["or"];
+            // ０回か１回
             var NOption = ('[' + NExp["option_exp"] + ']')["option"];
+            // ０回以上
+            var NAbove0 = (NExp["above0_exp"] + '*')["above0"];
+            // １回以上
+            var NAbove1 = (NExp["above1_exp"] + '+')["above1"];
+            // グループ化
             var NGroup = ('(' + NExp["group_exp"] + ')')["group"];
 
-            var NOr = (NExp["or_left"] + '|' + NExp["or_right"])["or"];
-            var NAbove0 = (NExp["above0_exp"] + '*')["above0"];
-            var NAbove1 = (NExp["above1_exp"] + '+')["above1"];
 
-            var NAbove = NAbove0 | NAbove1;
-            var NotID = NOption | NGroup | EnclosedLiteral;
-
+            // 連結
             var NConnect = NExp + NExp;
-                //(NOr| NakedID) + NotID |
-                //NAbove + NotID |
-                //NOr + NotID |
-                //NOr + NotID |
-                //NOr + NotID |
-                //NOr + NotID |
-                //(NAbove | NotID) + (NOr | NAbove | NotID | NakedID);
 
             NExp.Inner = NakedID | EnclosedLiteral |
-                NOr | NOption | NAbove | NGroup | NConnect;
+                NOr | NOption | NAbove0 | NAbove1 | NGroup | NConnect;
 
-            var NRule = (NakedID["rule_name"] + "::=" + NExp["rule_exp"] + ';'._()._01())["rule"];
+            // 裸の識別子で定義されたBNF
+            var NRule = (NakedID["rule_name"] + 
+                "::=" + NExp["rule_exp"] + ';'._01())["rule"];
             // 裸の識別子で定義されたBNF
             var NakedBNF = Begin + NRule._1Max() + End;
 
@@ -540,7 +580,9 @@ namespace LIME
         private static void WriteMatch(string text, MinimalMatch match, string indent)
         {
             Debug.WriteLine(
-                    $"[{match.Begin}-{match.End}]{indent}{match.ToString(text)} [{match.Tag}]"
+                    $"[{match.Begin}-{match.End}]{indent}{match.ToString(text)}" + 
+                    $" [{match.Tag}] {match.UniqID} {match.Generator.TypeName}" + 
+                    $" {match.Generator.UniqID}"
                        );
             foreach(var subMatch in match)
             {
@@ -650,17 +692,17 @@ namespace LIME
             string rangeText04 = (matcher * new Range(0, 4)).ToString();
             Debug.WriteLine("Range(0,4) = " + rangeText04);
 
-            string timesText0 = matcher.Times(0).ToString();
-            Debug.WriteLine("Times(0) = " + timesText0);
+            // string timesText0 = matcher.Times(0).ToString();
+            // Debug.WriteLine("Times(0) = " + timesText0);
 
-            string timesText1 = matcher.Times(1).ToString();
-            Debug.WriteLine("Times(1) = " + timesText1);
+            // string timesText1 = matcher.Times(1).ToString();
+            // Debug.WriteLine("Times(1) = " + timesText1);
 
-            string timesText2 = matcher.Times(2).ToString();
-            Debug.WriteLine("Times(2) = " + timesText2);
+            // string timesText2 = matcher.Times(2).ToString();
+            // Debug.WriteLine("Times(2) = " + timesText2);
 
-            string timesText2Star = matcher.Times(2, "★"._()).ToString();
-            Debug.WriteLine("Times(2,★) = " + timesText2Star);
+            // string timesText2Star = matcher.Times(2, "★"._()).ToString();
+            // Debug.WriteLine("Times(2,★) = " + timesText2Star);
 
 
 
